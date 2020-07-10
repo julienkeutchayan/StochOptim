@@ -19,6 +19,6 @@ The tools implemented in this package have been developed in the papers:
 * J. Keutchayan, M. Gendreau, F. Bastin (2018) [Problem-Driven Scenario Trees in Multistage Stochastic Optimization: An Illustration in Option Pricing](https://www.researchgate.net/profile/Julien_Keutchayan/publication/328703934_Problem-Driven_Scenario_Trees_in_Multistage_Stochastic_Optimization_An_Illustration_in_Option_Pricing/links/5bdcde684585150b2b9a4b89/Problem-Driven-Scenario-Trees-in-Multistage-Stochastic-Optimization-An-Illustration-in-Option-Pricing.pdf)
 
 for the **scenario generation** part, and in:
-* J. Keutchayan, J. Ortmann, W. Rei (2020) [Problem-Driven Scenario Clustering in Stochastic Optimization]() (soon available) \
+* J. Keutchayan, J. Ortmann, W. Rei (2020) [Problem-Driven Scenario Clustering in Stochastic Optimization]() (soon available)
 
 for the **scenario reduction** part. 
