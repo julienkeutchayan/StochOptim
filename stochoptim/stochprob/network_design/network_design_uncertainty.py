@@ -39,7 +39,7 @@ class Demands(UncertaintyBasis):
         elif self.distribution == "uniform":
             self._scenarios = np.array([self.uniform() for i in range(self.n_scenarios)])
     
-    def get_scenario(self, scen_index=None):
+    def get_scenario(self, scen_index):
         assert isinstance(scen_index, int), f"`scen_index should be of type int, not {type(scen_index)}."
         return {'d': self._scenarios[scen_index]}
     

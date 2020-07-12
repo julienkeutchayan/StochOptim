@@ -20,14 +20,13 @@ class UncertaintyBasis(ABC):
         self.n_features = sum(self.features.values())
             
     @abstractmethod
-    def get_scenario(self, scen_index=None) -> Dict[str, np.ndarray]:
+    def get_scenario(self, scen_index) -> Dict[str, np.ndarray]:
         """Returns a set of scenarios.
         
         Arguments:
         ----------
-        scen_indices: list of ints or None (default: None)
-            The indices for which the scenarios are returned.
-            If None, all scenarios are returned.
+        scen_index: int
+            The index of the scenario to return.
             
         Returns:
         --------
@@ -36,7 +35,7 @@ class UncertaintyBasis(ABC):
         pass
     
     def get_scenario_tree(self, scen_indices=None):
-        """Returns a set of geological scenarios with all mines and all attributes combined.
+        """Returns a scenario tree.
         
         Arguments:
         ----------
@@ -54,11 +53,7 @@ class UncertaintyBasis(ABC):
         for i, scen_index in enumerate(scen_indices):
             data_dict[(i,)] =  {'W': weights[i], 'scenario': self.get_scenario(scen_index)}            
         return ScenarioTree.from_data_dict(data_dict)
-    
-    def mean_scenario(self, scen_indices=None): # !!! not up to date
-        """Returns the mean scenario as a 1d-array of shape (n_features,)."""
-        return np.mean(self.get_scenarios(scen_indices), axis=0)
-    
+        
     def _check_scen_index(self, scen_index):
         assert scen_index in range(self.n_scenarios), \
             f"Scenario index {scen_index} is not in the range [0, {self.n_scenarios-1}]."
@@ -114,55 +109,6 @@ class CrossUncertainty(UncertaintyBasis):
         for i, uncertainty in enumerate(self.uncertainties):
             scenario = {**scenario, **uncertainty.get_scenario(scen_tuple[i])}
         return scenario
-        
-    def mean_scenarios(self, uncertainty_indices=None, scen_indices=None): # !!! not up to date
-        """ Returns a set of scenarios averaged over certain uncertainties only.
-        
-        Arguments:
-        ----------
-        uncertainty_indices: list of ints or None (default: None)
-            The index of the uncertainty for which the set of scenarios will be averaged.
-            If None, all uncertainties are averaged; the method is then equivalent to `.mean_scenario()` of 
-            UncertaintyBasis, expect that the later returns an 1d-array.
-            
-        scen_indices: list of ints or None (default: None)
-            The indices of the cross-uncertainty scenarios over which the average will be done.
-            If None, all scenarios are averaged.
-            
-        Returns:
-        --------
-        2d-array
-        """
-        if uncertainty_indices is None:
-            return UncertaintyBasis.mean_scenario(self, scen_indices).reshape(1, -1)
-        
-        assert set(uncertainty_indices).issubset(set(range(self.n_uncertainties))), \
-            f"Uncertainty indices {uncertainty_indices} should be in the range [0, {self.n_uncertainties-1}]"
-            
-        mean_scenarios = self.get_scenarios(scen_indices)
-        count = 0
-        rows_to_avg = []
-        for index in range(self.n_uncertainties):
-            if index in uncertainty_indices:
-                features_columns = count + np.array(range(self.n_features_per_uncertainty[index]))
-                rows_to_avg += list(features_columns)
-            count += self.n_features_per_uncertainty[index]
-        mean_scenarios[:, rows_to_avg] = np.mean(self.get_scenarios(scen_indices)[:, rows_to_avg], axis=0)
-        
-        if self.combiner == 'zip':
-            if set(uncertainty_indices) == set(range(self.n_uncertainties)): # if all uncertainty are averaged
-                # all scenarios are the same so we output the 1st one only 
-                return mean_scenarios[[0]] # shape (1, n_features)
-            else:
-                # all scenarios may be different
-                return mean_scenarios # shape (n_scenarios, n_features)
-            
-        
-        # we drop the indentical scenarios by building the scenarios of a new cross uncertainty with 
-        # the uncertainties that have not been averaged
-        non_avg_uncertainty_indices = [i for i in range(self.n_uncertainties) if i not in uncertainty_indices]
-        rows_of_interest = self._rows_sub_cross_uncertainty(non_avg_uncertainty_indices)
-        return mean_scenarios[rows_of_interest]
             
     def _rows_sub_cross_uncertainty(self, uncertainty_indices):
         """Returns the rows (scenarios) indices that are required to build a sub cross-uncertainty.

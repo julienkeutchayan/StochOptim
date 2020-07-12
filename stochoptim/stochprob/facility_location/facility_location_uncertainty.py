@@ -29,7 +29,7 @@ class ClientsPresence(UncertaintyBasis):
     def randomize(self):
         self._scenarios = np.array([self.bernoulli() for _ in range(self.n_scenarios)])
         
-    def get_scenario(self, scen_index=None):
+    def get_scenario(self, scen_index):
         assert isinstance(scen_index, int), f"`scen_index should be of type int, not {type(scen_index)}."
         return {'h': self._scenarios[scen_index]}
     
