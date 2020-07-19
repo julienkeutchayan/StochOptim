@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from stochoptim.stochprob.uncertainty_basis import UncertaintyBasis
+from ..uncertainty_basis import UncertaintyBasis
 
 class ClientsPresence(UncertaintyBasis):
     
