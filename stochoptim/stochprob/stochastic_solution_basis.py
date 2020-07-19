@@ -63,18 +63,22 @@ class StochasticSolutionBasis:
     def n_scenarios(self):
         return sum(1 for _ in self._scenario_tree.leaves)
     
-    @property
-    def warmstart(self):
+    def warmstart(self, excluding_var_names: Optional[Dict[int, List[str]]] = None):
         """Build a warmstart dictionary from the scenario-tree solution.
-        This dictionary can be given as argument of StochasticProblemBasis.solve() under the keyword 'warmstart'.
+        This dictionary can be given as argument of StochasticProblemBasis.solve() under the 
+        keyword 'warmstart'.
         
         Returns:
         --------
-        dictionary mapping variable names (string) to values (int or float).
+        dictionary mapping variable names (str) to values (int or float).
         """
+        if excluding_var_names is None:
+            excluding_var_names = dict()
         warmstart_dict = {}
         for node in self._scenario_tree.nodes:
             for var_name, map_subcript_to_index in self._stochastic_problem.map_dvar_to_index[node.level].items():
+                if var_name in excluding_var_names.get(node.level, []):
+                    continue
                 for subscript, index in map_subcript_to_index.items():
                     if isinstance(subscript, tuple):
                         subscript_str = '_'.join([str(s) for s in subscript])
@@ -83,7 +87,7 @@ class StochasticSolutionBasis:
                     key = f'{var_name}_{node.address}_{subscript_str}'
                     var_type = self._stochastic_problem.map_stage_to_var_type[node.level][var_name][0]
                     if var_type in ['B', 'I']:
-                        warmstart_dict[key] = int(round(node.data['decision'][var_name][index]))
+                        warmstart_dict[key] = int(np.round(node.data['decision'][var_name][index]))
                     else:
                         warmstart_dict[key] = float(node.data['decision'][var_name][index])
         return warmstart_dict

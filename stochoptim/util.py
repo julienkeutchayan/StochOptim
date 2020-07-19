@@ -4,6 +4,11 @@ import sys
 import os
 import time
 
+import numpy as np
+
+numpy_numerical_types  = [np.dtype(f'int{bits}') for bits in [8, 16, 32, 64]] \
+                          + [np.dtype(f'float{bits}') for bits in [16, 32, 64]]
+            
 def progress_bar(value, endvalue, bar_length=20, endline=""):
     percent = float(value) / endvalue
     arrow = '-' * int(round(percent * bar_length)-1) + '>'

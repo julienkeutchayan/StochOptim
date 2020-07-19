@@ -5,7 +5,7 @@ import copy
 
 from typing import Union, List, Dict, Tuple, Optional, Callable, Iterator, Any
 import numpy as np
-from docplex.mp.constr import LinearConstraint
+from docplex.mp.constr import LinearConstraint, QuadraticConstraint
 from docplex.mp.linear import Var
 
 from stochoptim.scengen.approx_prob import ApproximateProblem, _timeit
@@ -219,7 +219,7 @@ class StochasticProblemBasis(ABC):
         else:
             # if coef is a number we repeat it in an array otherwise np.dot behaves as np.multiply
             if np.array(coef).shape == (): 
-                coef = np.tile(coef, var.shape[0])
+                coef = coef * np.ones(var.shape[0]) # faster than np.tile
             return np.dot(var, coef)
 
     def set_path_info(self, node, model=None):
@@ -254,6 +254,8 @@ class StochasticProblemBasis(ABC):
             return iter(()) # empty iterator
         
         for ct_generator in self._constraints_generators[ct_type]:
+            assert hasattr(ct_generator, '__next__'), ("Constraints should be given as an "
+            f"iterator, it was of type {type(ct_generator)} at node {node.address}.")
             if remove_constraints is not None and ct_generator.__name__ in remove_constraints:
                 continue
             for ct_tuple in ct_generator:
@@ -320,8 +322,8 @@ class StochasticProblemBasis(ABC):
         """Return True if the constraint includes a least one decision variable.
         Note: a constraint with no decision variables (i.e., with both side constant) may arise when some of the 
         decisions are fixed beforehand."""
-        if isinstance(ct, LinearConstraint): # if the constraint is a docplex linear expression
-            if ct.rhs.is_constant() and ct.lhs.is_constant(): # if left-hand side and right-hand side are both constant
+        if isinstance(ct, (LinearConstraint, QuadraticConstraint)): # if the constraint is a docplex linear expression
+            if ct.right_expr.is_constant() and ct.left_expr.is_constant(): # if left-hand side and right-hand side are both constant
                 return False
             else:
                 return True
@@ -774,6 +776,14 @@ class StochasticProblemBasis(ABC):
         return dict_vpd
     
     # --- Precomputation ---
+    @property
+    def precomputed_decisions_name(self):
+        return self._name_precomputed_decisions
+    
+    @property
+    def precomputed_parameters_name(self):
+        return self._name_precomputed_parameters
+    
     def _initialize_precomputation(self):
         """Get the name of the precomputed parameters and variables. This sets the dictionary attributes 
         `_name_precomputed_decisions` and `_name_precomputed_parameters` at every stage."""
@@ -789,13 +799,13 @@ class StochasticProblemBasis(ABC):
                 for name, _ in self.precompute_parameters(stage):
                     self._name_precomputed_parameters[stage].add(name)
             
-    def precompute_decision_variables_(self, node, model=None):
+    def precompute_decision_variables_at_node(self, node, model=None):
         self.set_path_info(node, model)
         if self._name_precomputed_decisions[node.level] != set():
             for name, value_fct in self.precompute_decision_variables(node.level):
                 self._memory_path[node.level][name] = value_fct()
         
-    def precompute_parameters_(self, node):
+    def precompute_parameters_at_node(self, node):
         self.set_path_info(node)
         if self._name_precomputed_parameters[node.level] != set():
             for name, value_fct in self.precompute_parameters(node.level):

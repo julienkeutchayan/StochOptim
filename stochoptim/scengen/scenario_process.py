@@ -11,7 +11,35 @@ ScenarioType = Dict[str, np.ndarray]
 ScenarioPathType = Dict[int, ScenarioType]
 
 class ScenarioProcess:
-    """The process that fills a tree structure with scenarios"""
+    """The process that fills a tree structure with scenarios.
+    
+    Arguments:
+    ----------
+    scenario_fct: Callable[[int, 1d-array, Dict[int, Dict[str, 1d-array]]], Dict[str, 1d-array]]
+        Function that takes as argument the stage, the discretization point (called epsilon by convention), 
+        and the scenario path up to (but not including) the stage, and returns the corresponding scenario.
+        (See the signature of the `get_scenario` method.)
+        
+    epsilons_fct: Callable[[int, int], 2d-array] or None (default: None)
+        Function that takes as argument the stage and the number of sample points, and returns a sample of 
+        discretization points.
+        (See the signature of the `get_epsilon_sample` method.)
+        
+    weights_fct: Callable[[int, int], 1d-array] or None (default: None)
+        Function that takes as argument the stage and the number of sample points, and returns a sample of 
+        discretization weights (probabilities if they sum to one).
+        (See the signature of the `get_epsilon_sample` method.)
+        
+    name: str or None (default: None)
+        Name of the scenario process
+        
+    checker: bool (default: False)
+        If True, the type and size of the scenarios and the discretization points and weights are checked.
+        
+    stochastic_problem: instance of a subclass of StochasticProblemBasis or None (default: None)
+        If provided (and if `checker` is True) the scenarios are checked to be in accordance with what is specified
+        in the problem in terms of the names of the random variables and their dimensions.
+    """
     
     def __init__(self, 
                  scenario_fct: Callable[[int, np.ndarray, ScenarioPathType], ScenarioType], 
@@ -21,32 +49,7 @@ class ScenarioProcess:
                  checker: bool = False,
                  stochastic_problem: Optional['StochasticProblemBasis'] = None):  
         """
-        Arguments:
-        ----------
-        scenario_fct: Callable[[int, 1d-array, Dict[int, Dict[str, 1d-array]]], Dict[str, 1d-array]]
-            Function that takes as argument the stage, the discretization point (called epsilon by convention), 
-            and the scenario path up to (but not including) the stage, and returns the corresponding scenario.
-            (See the signature of the `get_scenario` method.)
-            
-        epsilons_fct: Callable[[int, int], 2d-array] or None (default: None)
-            Function that takes as argument the stage and the number of sample points, and returns a sample of 
-            discretization points.
-            (See the signature of the `get_epsilon_sample` method.)
-            
-        weights_fct: Callable[[int, int], 1d-array] or None (default: None)
-            Function that takes as argument the stage and the number of sample points, and returns a sample of 
-            discretization weights (probabilities if they sum to one).
-            (See the signature of the `get_epsilon_sample` method.)
-            
-        name: str or None (default: None)
-            Name of the scenario process
-            
-        checker: bool (default: False)
-            If True, the type and size of the scenarios and the discretization points and weights are checked.
-            
-        stochastic_problem: instance of a subclass of StochasticProblemBasis or None (default: None)
-            If provided (and if `checker` is True) the scenarios are checked to be in accordance with what is specified
-            in the problem in terms of the names of the random variables and their dimensions.
+
         """
         self._scenario_fct = scenario_fct
         self._epsilons_fct = epsilons_fct
@@ -167,11 +170,13 @@ class ScenarioProcess:
             The scenario at the node or the scenario path leading to the node.
         """
         if path:
-            return {stage: self.get_node_scenario(n, path=False) for stage, n in enumerate(node.branch)}
+            return {stage: self.get_node_scenario(n, path=False) 
+                    for stage, n in enumerate(node.branch)}
         else:
             return self.get_scenario(node.level, 
                                      node.data.get("eps"), 
-                                     Node.get_data_path(node.parent, 'scenario') if not node.is_root else None)
+                                     Node.get_data_path(node.parent, 'scenario') 
+                                     if not node.is_root else None)
 
 
 def mc_normal_sample(n_samples, mu=0, sigma=1):

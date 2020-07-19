@@ -3,21 +3,27 @@
 import numpy as np
 from itertools import product
 
-from stochoptim.stochprob.network_design.network_design_solution import NetworkDesignSolution
-from stochoptim.stochprob.stochastic_problem_basis import StochasticProblemBasis
+from .network_design_solution import NetworkDesignSolution
+from ..stochastic_problem_basis import StochasticProblemBasis
 
 
 class NetworkDesign(StochasticProblemBasis):
-      
+    """Two-stage Network Design Problem.
+    
+    Arguments:
+    ----------
+    param: dict with keys and values:
+        'n_origins':        int
+        'n_destinations':   int 
+        'n_intermediates':  int
+        'opening_cost':     2d-array, shape (n_vertices, n_vertices) 
+        'shipping_cost':    2d-array, shape (n_vertices, n_vertices) 
+        'capacity':         2d-array, shape (n_vertices, n_vertices)  
+        
+    where n_vertices = n_origins + n_destinations + n_intermediates.
+    """
+    
     def __init__(self, param):
-        """
-        param = {'n_origins': int, 
-                 'n_destinations': int, 
-                 'n_intermediates': int,
-                 'opening_cost': 2d-array,
-                 'shipping_cost': 2d-array,
-                 'capacity': 2d-array}
-        """
         self.param = param        
         self.n_origins = self.param['n_origins']
         self.n_destinations = self.param['n_destinations']
@@ -29,10 +35,10 @@ class NetworkDesign(StochasticProblemBasis):
         self.destinations = self.vertices[-self.n_destinations:] # destinations
         
         # arcs
-        self.OD_arcs = list(product(self.origins, self.destinations)) # all arcs linking origins to destinations
+        self.od_arcs = list(product(self.origins, self.destinations)) # all arcs linking origins to destinations
         self.transport_arcs = [arc for arc in product(self.vertices, self.vertices) 
-                                if arc[0] != arc[1] and arc not in self.OD_arcs] # all arcs but OD pairs
-        self.all_arcs = self.OD_arcs + self.transport_arcs
+                                if arc[0] != arc[1] and arc not in self.od_arcs] # all arcs but od pairs
+        self.all_arcs = self.od_arcs + self.transport_arcs
 
 
         # stochastic problem information
@@ -45,12 +51,12 @@ class NetworkDesign(StochasticProblemBasis):
                                         solution_class=NetworkDesignSolution)
                       
     # ---- random parameters ----       
-    def d(self, vertex, OD):
-        """d_{i}^{k,s}: random demand of commodity OD at vertex i in scenario s"""
-        demand = self.get_rvar(1, 'd', OD)
-        if vertex == OD[0]: # if the vertex is the origin of the commodity
+    def d(self, vertex, od):
+        """d_{i}^{k,s}: random demand of commodity od at vertex i in scenario s"""
+        demand = self.get_rvar(1, 'd', od)
+        if vertex == od[0]: # if the vertex is the origin of the commodity
             return demand
-        elif vertex == OD[1]: # if the vertex is the destination of the commodity
+        elif vertex == od[1]: # if the vertex is the destination of the commodity
             return -demand
         else: # if the vertex is an intermediate step
             return 0
@@ -61,33 +67,33 @@ class NetworkDesign(StochasticProblemBasis):
         return self.get_dvar(0, 'y', arc)
     
     # ---- 2nd-stage decision variables ----    
-    def z(self, arc=None, OD=None):
-        """z_{i,j}^{k,s}: quantity of commodity OD transported on arc (i,j) in scenario s"""
-        if arc is None and OD is None:
+    def z(self, arc=None, od=None):
+        """z_{i,j}^{k,s}: quantity of commodity od transported on arc (i,j) in scenario s"""
+        if arc is None and od is None:
             return self.get_dvar(1, 'z')
         else:
-            return self.get_dvar(1, 'z', (arc, OD))
+            return self.get_dvar(1, 'z', (arc, od))
  
     def decision_variables_definition(self, stage):
-        """For each decision variables of type {y_{t,i} \in A : i \in I} where I is an indexing set 
-        (a list of tuples), y_{t,i} is of type A (with A = binary (B), or integer (I), or continuous (C)), 
+        """For each decision variables of type {y_{t,i} \in A : i \in I} where I is an indexing set (a list of 
+        ints or tuples of ints), y_{t,i} is of type A (with A = binary (B), or integer (I), or continuous (C)), 
         and lb <= y_{t,i} <= ub, this function generates a 5-tuple of the form: ('y', I, lb, ub, A) 
         under the conditon: stage == t. (lb and ub can be two lists provided they have the same size as I)"""
         if stage == 0:
             yield 'y', self.transport_arcs, 0, 1, 'B'
         elif stage == 1:
-            yield 'z', list(product(self.all_arcs, self.OD_arcs)), 0, None, 'C'
+            yield 'z', list(product(self.all_arcs, self.od_arcs)), 0, None, 'C'
 
     def random_variables_definition(self, stage):
         """For each random variable of type {xi_{stage,i} : i \in I} where I is an indexing set (an iterable), 
         this method generates a 2-tuple of the form ('xi', I)"""
         if stage == 1:
-            yield 'd', self.OD_arcs
+            yield 'd', self.od_arcs
 
     def objective(self):
         """Returns the problem's objective function"""        
         first_stage = self.dot(self.y(), [self.opening_cost(arc) for arc in self.transport_arcs])
-        second_stage = self.dot(self.z(), [self.shipping_cost(arc) for (arc, OD) in product(self.all_arcs, self.OD_arcs)])
+        second_stage = self.dot(self.z(), [self.shipping_cost(arc) for (arc, od) in product(self.all_arcs, self.od_arcs)])
         return first_stage + second_stage
     
     def deterministic_linear_constraints(self, stage):
@@ -112,15 +118,15 @@ class NetworkDesign(StochasticProblemBasis):
     def transport_constraints(self):
         # sum commodities on each each <= capacity (if arc is open)
         for arc in self.transport_arcs:
-            yield self.sum([self.z(arc, OD) for OD in self.OD_arcs]) \
+            yield self.sum([self.z(arc, od) for od in self.od_arcs]) \
                                 <= self.capacity(arc) * self.y(arc), f"open_{arc}"
                                     
     def demand_constraints(self):
         # [what goes in] - [what goes out] = [demand of the node]
-        for vertex, OD in product(self.vertices, self.OD_arcs):
-            out_sum = self.sum([self.z(arc, OD) for arc in self.all_arcs if arc[0] == vertex])
-            in_sum = self.sum([self.z(arc, OD) for arc in self.all_arcs if arc[1] == vertex])
-            yield out_sum - in_sum == self.d(vertex, OD), f"demand_{vertex}_{OD}"
+        for vertex, od in product(self.vertices, self.od_arcs):
+            out_sum = self.sum([self.z(arc, od) for arc in self.all_arcs if arc[0] == vertex])
+            in_sum = self.sum([self.z(arc, od) for arc in self.all_arcs if arc[1] == vertex])
+            yield out_sum - in_sum == self.d(vertex, od), f"demand_{vertex}_{od}"
                 
     def precompute_decision_variables(self, stage):
         pass
@@ -164,7 +170,7 @@ class NetworkDesign(StochasticProblemBasis):
         string = ("Network: \n"
                   f"  {len(self.vertices)} nodes\n"      
                   f"  {len(self.transport_arcs)} transportation arcs\n"
-                  f"  {len(self.OD_arcs)} commodities")
+                  f"  {len(self.od_arcs)} commodities")
         return string_problem + "\n" + string
     
 from_file = NetworkDesign.from_file

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from itertools import product
 import numpy as np
 
-from stochoptim.stochprob.stochastic_solution_basis import StochasticSolutionBasis
+from ..stochastic_solution_basis import StochasticSolutionBasis
 
 
 class FacilityLocationSolution(StochasticSolutionBasis):
@@ -107,7 +107,7 @@ class FacilityLocationSolution(StochasticSolutionBasis):
                 ax.set_title(f"$v^*: {obj_to_show:.2f}$")
             else:
                 obj_to_show = self.objective_value_at_leaves[scen_index]
-                ax.set_title(f"$v^*_{scen_index}: {obj_to_show:.2f}$")         
+                ax.set_title(f"$v^*: {obj_to_show:.2f}$")         
              
         self._set_axes(ax, **kwargs)
         self._save_fig(path, extension)

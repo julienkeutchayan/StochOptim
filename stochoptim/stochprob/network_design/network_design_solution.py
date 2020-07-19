@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-from stochoptim.stochprob.stochastic_solution_basis import StochasticSolutionBasis
+from ..stochastic_solution_basis import StochasticSolutionBasis
 
 
 class NetworkDesignSolution(StochasticSolutionBasis):
@@ -26,19 +26,19 @@ class NetworkDesignSolution(StochasticSolutionBasis):
         return {arc: self.is_open(arc) for arc in self.stochastic_problem.transport_arcs}
 
     def n_open_arcs(self):
-        return np.sum(self.x0)
+        return np.sum(self.x0['y'])
     
-    def is_penalized(self, OD):
+    def is_penalized(self, od):
         penality = 0
         for scen_index in range(self.n_scenarios):
             self.set_path_info(scen_index)
-            penality += self.stochastic_problem.z(OD, OD)
+            penality += self.stochastic_problem.z(od, od)
         return True if penality > 0 else False
          
     def get_transported_amount(self, arc, scen_index):
         """Returns the amount of all commodities transported on an arc in a given scenario"""
         self.set_path_info(scen_index)
-        return sum([self.stochastic_problem.z(arc, OD) for OD in self.stochastic_problem.OD_arcs])
+        return sum([self.stochastic_problem.z(arc, od) for od in self.stochastic_problem.od_arcs])
     
     def is_used(self, arc, scen_index):
         """True if the arc has some commodities transported on it"""
@@ -47,16 +47,16 @@ class NetworkDesignSolution(StochasticSolutionBasis):
     def n_used_arc(self, scen_index):
         return sum([self.is_used(arc, scen_index) for arc in self.stochastic_problem.transport_arcs])
     
-    def get_penalty_value(self, OD, scen_index):
+    def get_penalty_value(self, od, scen_index):
         self.set_path_info(scen_index)
-        return self.stochastic_problem.z(OD, OD)
+        return self.stochastic_problem.z(od, od)
                 
     def get_penalty_dict(self):
-        dict_penalty_value = {OD: 0 for OD in self.stochastic_problem.OD_arcs} # {OD pair: amount transported on OD arc}        
-        for OD in self.stochastic_problem.OD_arcs:
+        dict_penalty_value = {od: 0 for od in self.stochastic_problem.od_arcs} # {od pair: amount transported on od arc}        
+        for od in self.stochastic_problem.od_arcs:
             for scen_index in range(self.n_scenarios):
                 self.set_path_info(scen_index)
-                dict_penalty_value[OD] += self.stochastic_problem.z(OD, OD) 
+                dict_penalty_value[od] += self.stochastic_problem.z(od, od) 
         return dict_penalty_value
     
     def _vertex_color(self, vertex):
@@ -85,7 +85,7 @@ class NetworkDesignSolution(StochasticSolutionBasis):
                     kw = dict(arrowstyle=arrowstyle, color=self._arc_color(arc), alpha=1)
                 else: 
                     kw = dict(arrowstyle=arrowstyle, color="k", alpha = 0.05)
-            elif arc in self.stochastic_problem.OD_arcs:                
+            elif arc in self.stochastic_problem.od_arcs:                
                 if self.is_penalized(arc):
                     kw = dict(arrowstyle=arrowstyle, color="k", alpha = 1, linestyle = "--")
                 else:
@@ -99,7 +99,7 @@ class NetworkDesignSolution(StochasticSolutionBasis):
                     kw = dict(arrowstyle=arrowstyle, color=self._arc_color(arc), alpha=0.2)
                 else: 
                     kw = dict(arrowstyle=arrowstyle, color="k", alpha = 0.05)
-            elif arc in self.stochastic_problem.OD_arcs:
+            elif arc in self.stochastic_problem.od_arcs:
                 if self.get_penalty_value(arc, scen_index) > 0:
                     kw = dict(arrowstyle=arrowstyle, color="k", alpha = 1, linestyle = "--")
                 else:
@@ -118,57 +118,48 @@ class NetworkDesignSolution(StochasticSolutionBasis):
             label += ",".join([str(self.stochastic_problem.d(vertex, (O, vertex)))
                                     for O in self.stochastic_problem.origins])
         return label
-    
-    def plot_network(self, show_title=True, figsize=(6,5), path=None, extension=".pdf"):
+                
+    def plot_network(self, 
+                     scen_index=None, 
+                     show_title=True, 
+                     randomize_txt_box=True,
+                     figsize=(6,5), 
+                     path=None, 
+                     extension=".pdf"):
         fig, ax = plt.subplots(figsize=figsize)
         N = len(self.stochastic_problem.vertices)
         pos = {vertex: np.exp(2*np.pi*1j * k / N) for k, vertex in enumerate(self.stochastic_problem.vertices, 1)}
         pos = {key: (value.real, value.imag) for key, value in pos.items()}
+        
         # Plot vertices
         for vertex in self.stochastic_problem.vertices:
-            ax.scatter(*pos[vertex], c = self._vertex_color(vertex), s=150, alpha=0.8)
-            ax.text(*pos[vertex], vertex, horizontalalignment='center', verticalalignment='center')        
+            label = self._vertex_label(vertex, scen_index) if scen_index is not None else None
+            ax.scatter(*pos[vertex], c=self._vertex_color(vertex), 
+                       s=150, alpha=0.8, label=label)
+            ax.text(*pos[vertex], vertex, 
+                    horizontalalignment='center', verticalalignment='center')   
+            
         # Plot arcs
         for arc in self.stochastic_problem.all_arcs:             
             a = patches.FancyArrowPatch(pos[arc[0]], pos[arc[1]], 
-                                        connectionstyle="arc3,rad=.05", **self._arc_style(arc))
+                                        connectionstyle="arc3,rad=.05", 
+                                        **self._arc_style(arc, scen_index))
             fig.gca().add_patch(a)
-    
+            if scen_index is not None:
+                self._print_transportated_value(arc, scen_index, randomize_txt_box, pos, ax)
+                
+        if scen_index is not None:
+            ax.legend(bbox_to_anchor=(1, 1.15), loc=1, borderaxespad=1, prop={'size': 7})
         if show_title:
-            ax.set_title("$v^* = {}$".format(self.objective_value))
+            if scen_index is None:
+                obj_to_show = self.objective_value
+                ax.set_title(f"$v^*: {obj_to_show:.2f}$")
+            else:
+                obj_to_show = self.objective_value_at_leaves[scen_index]
+                ax.set_title(f"$v^*: {obj_to_show:.2f}$")
         ax.axis('off')
         self._save_fig(path, extension)
         fig.show()
-                          
-    def plot_network_by_scenario(self, scen_indices=None, label=True, show_title=True, randomize_txt_box=True, 
-                                 figsize=(4,3), path=None, extension=".pdf"):
-        if scen_indices is None:
-            scen_indices = range(self.n_scenarios)
-
-        for scen_index in scen_indices:
-            fig, ax = plt.subplots(figsize=figsize)
-            N = len(self.stochastic_problem.vertices)
-            pos = {vertex: np.exp(2*np.pi*1j * k / N) for k, vertex in enumerate(self.stochastic_problem.vertices, 1)}
-            pos = {key: (value.real, value.imag) for key, value in pos.items()}
-            # Plot vertices
-            for vertex in self.stochastic_problem.vertices:
-                ax.scatter(*pos[vertex], c = self._vertex_color(vertex), s=150, alpha=0.8, 
-                           label=self._vertex_label(vertex, scen_index))
-                ax.text(*pos[vertex], vertex, horizontalalignment='center', verticalalignment='center')
-            # Plot arcs
-            for arc in self.stochastic_problem.all_arcs:             
-                a = patches.FancyArrowPatch(pos[arc[0]], pos[arc[1]], connectionstyle="arc3,rad=.05", 
-                                            **self._arc_style(arc, scen_index))
-                fig.gca().add_patch(a)
-                self._print_transportated_value(arc, scen_index, randomize_txt_box, pos, ax)
-                    
-            if label != "":    
-                ax.legend(bbox_to_anchor=(1, 1.15), loc=1, borderaxespad=1, prop={'size': 7})
-            if show_title:
-                ax.set_title("$v^* = {}$".format(self.objective_value))
-            ax.axis('off')
-            self._save_fig(path, extension)
-            fig.show()
            
     def _print_transportated_value(self, arc, scen_index, randomize_txt_box, pos, ax):  
         if not hasattr(self, 'alpha'):

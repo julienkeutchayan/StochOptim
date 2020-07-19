@@ -74,8 +74,10 @@ class CrossUncertainty(UncertaintyBasis):
         self.combiner = combiner
         self.n_uncertainties = len(self.uncertainties)
         
-        self.n_scenarios_per_uncertainty = [uncertainty.n_scenarios for uncertainty in self.uncertainties]
-        self.n_features_per_uncertainty = [uncertainty.n_features for uncertainty in self.uncertainties]
+        self.n_scenarios_per_uncertainty = [uncertainty.n_scenarios 
+                                            for uncertainty in self.uncertainties]
+        self.n_features_per_uncertainty = [uncertainty.n_features 
+                                           for uncertainty in self.uncertainties]
         self._set_combiner()
             
         # combine all features together
@@ -91,16 +93,19 @@ class CrossUncertainty(UncertaintyBasis):
     def _set_combiner(self):
         if self.combiner == "cartesian": 
             self.n_scenarios = np.prod(self.n_scenarios_per_uncertainty)
-            self.map_scen_index_to_scen_tuple = list(product(*[range(uncertainty.n_scenarios) 
-                                                                    for uncertainty in self.uncertainties]))
+            self.map_scen_index_to_scen_tuple = list(
+                    product(*[range(uncertainty.n_scenarios) 
+                    for uncertainty in self.uncertainties])
+            )
         elif self.combiner == "zip":
-            assert min(self.n_scenarios_per_uncertainty) == max(self.n_scenarios_per_uncertainty), \
-                         "All uncertainties must have the same number of scenarios for combiner 'zip'."
+            assert len(set(self.n_scenarios_per_uncertainty)) == 1, \
+                "All uncertainties must have the same number of scenarios for combiner 'zip'."
             self.n_scenarios = self.n_scenarios_per_uncertainty[0]
             self.map_scen_index_to_scen_tuple = [tuple([i] * len(self.uncertainties)) 
                                                     for i in range(self.n_scenarios)]
         else:
-            raise TypeError(f"Wrong 'combiner' input: must be either 'cartesian' or 'zip', not {self.combiner}")    
+            raise TypeError(f"Wrong 'combiner' input: must be either 'cartesian' or 'zip', "
+                            "not {self.combiner}")    
           
     def get_scenario(self, scen_index):
         self._check_scen_index(scen_index)

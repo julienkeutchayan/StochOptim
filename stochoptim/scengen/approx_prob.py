@@ -346,19 +346,20 @@ class ApproximateProblem:
             # parameters
             if self.precompute_parameters:
                 for node in self.scenario_tree.nodes:
-                    self._stochastic_problem.precompute_parameters_(node)
+                    self._stochastic_problem.precompute_parameters_at_node(node)
             # variables
             if self.precompute_decisions:
-                # fixed decisions
+                # fixed decisions (no  model needed)
                 for node in self.scenario_tree.nodes:
                     if node.level < self._stage_fixed_dvar:
-                        self._stochastic_problem.precompute_decision_variables_(node)
-                # not fixed decisions   
+                        self._stochastic_problem.precompute_decision_variables_at_node(node)
+                # not fixed decisions (needs a model to perform operations on dvar)   
                 for subroot in self._subroots(self.scenario_tree):
                     model = self._docplex_models[subroot.address]
                     for node in subroot.nodes:
                         if node.level >= self._stage_fixed_dvar:
-                            self._stochastic_problem.precompute_decision_variables_(node, model)
+                            self._stochastic_problem.precompute_decision_variables_at_node(node,
+                                                                                           model)
 
     # --- Main methods ---
     def build_deterministic_part(self):
@@ -485,7 +486,7 @@ class ApproximateProblem:
                                                         
                         # re-do precomputation with actual decision values where it wasn't done already
                         if self.precompute_decisions and node.level >= self._stage_fixed_dvar:
-                            self._stochastic_problem.precompute_decision_variables_(node)
+                            self._stochastic_problem.precompute_decision_variables_at_node(node)
                         
                         # remove memory from dictionary if empty
                         if node.data.get('memory') == dict():

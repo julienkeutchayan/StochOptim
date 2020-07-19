@@ -3,32 +3,32 @@
 import numpy as np
 from itertools import product
 
-from stochoptim.stochprob.facility_location.facility_location_solution import FacilityLocationSolution
-from stochoptim.stochprob.stochastic_problem_basis import StochasticProblemBasis
+from .facility_location_solution import FacilityLocationSolution
+from ..stochastic_problem_basis import StochasticProblemBasis
 
 class FacilityLocationProblemMultistage(StochasticProblemBasis):
+    """Three-Stage Facility Location Problem.
     
-    def __init__(self, param):
-        """Three-Stage Facility Location Problem.
+    Argument:
+    ---------
+    param: dict with keys and values:
+        "pos_client":               2d-array of shape (n_client_locations, 2)
+        "pos_facility":             2d-array of shape (n_facility_locations, 2)
+        "opening_cost":             1d-array of shape (n_facility_locations,)
+        "facility_capacity":        1d-array of shape (n_facility_locations,)
+        "penalty":                  1d-array of shape (n_facility_locations,)
+        "shipping_cost":            (optional) 2d-array of shape (n_client_locations, n_facility_locations)
+        "resources":                (optional) 2d-array of shape (n_client_locations, n_facility_locations)
+        "max_facilities":           int
+        "min_facilities_in_zone":   1d-array of shape (n_zones,)
+        "facility_in_zone":         1d-array of shape (n_facility_locations,) (of int values in [0, n_zones-1])
         
-        Argument:
-        ---------
-        param: dict with keys and values:
-            "pos_client":               2d-array of shape (n_client_locations, 2)
-            "pos_facility":             2d-array of shape (n_facility_locations, 2)
-            "opening_cost":             1d-array of shape (n_facility_locations,)
-            "facility_capacity":        1d-array of shape (n_facility_locations,)
-            "penalty":                  1d-array of shape (n_facility_locations,)
-            "shipping_cost":            (optional) 2d-array of shape (n_client_locations, n_facility_locations)
-            "resources":                (optional) 2d-array of shape (n_client_locations, n_facility_locations)
-            "max_facilities":           int
-            "min_facilities_in_zone":   1d-array of shape (n_zones,)
-            "facility_in_zone":         1d-array of shape (n_facility_locations,) (of int values in [0, n_zones-1])
-            
-        If the keys "shipping_cost" and/or "resources" are not provided, they are computed from the distances between
-        facilities and clients (see methods: resources() and shipping_cost()).
-        """
-                
+    If the keys "shipping_cost" and/or "resources" are not provided, they are computed 
+    from the distances between facilities and clients (see methods: resources() and 
+    shipping_cost()).
+    """
+        
+    def __init__(self, param):                
         self.param = param
         self.n_facility_locations = self.param['pos_facility'].shape[0]
         self.n_client_locations = self.param['pos_client'].shape[0]
@@ -267,26 +267,27 @@ class FacilityLocationProblemMultistage(StochasticProblemBasis):
     
     
 class FacilityLocationProblemMultistageCapacity(StochasticProblemBasis):
+    """Three-Stage Facility Location Problem with capacity decisions at 2nd stage.
     
-    def __init__(self, param):
-        """Three-Stage Facility Location Problem with capacity decisions.
+    Argument:
+    ---------
+    param: dict with keys and values:
+        "pos_client":               2d-array of shape (n_client_locations, 2)
+        "pos_facility":             2d-array of shape (n_facility_locations, 2)
+        "opening_cost":             1d-array of shape (n_facility_locations,)
+        "penalty":                  1d-array of shape (n_facility_locations,)
+        "shipping_cost":            (optional) 2d-array of shape (n_client_locations, n_facility_locations)
+        "resources":                (optional) 2d-array of shape (n_client_locations, n_facility_locations)
+        "max_facilities":           int
+        "min_facilities_in_zone":   1d-array of shape (n_zones,)
+        "facility_in_zone":         1d-array of shape (n_facility_locations,) (of int values in [0, n_zones-1])
         
-        Argument:
-        ---------
-        param: dict with keys and values:
-            "pos_client":               2d-array of shape (n_client_locations, 2)
-            "pos_facility":             2d-array of shape (n_facility_locations, 2)
-            "opening_cost":             1d-array of shape (n_facility_locations,)
-            "penalty":                  1d-array of shape (n_facility_locations,)
-            "shipping_cost":            (optional) 2d-array of shape (n_client_locations, n_facility_locations)
-            "resources":                (optional) 2d-array of shape (n_client_locations, n_facility_locations)
-            "max_facilities":           int
-            "min_facilities_in_zone":   1d-array of shape (n_zones,)
-            "facility_in_zone":         1d-array of shape (n_facility_locations,) (of int values in [0, n_zones-1])
-            
-        If the keys "shipping_cost" and/or "resources" are not provided, they are computed from the distances between
-        facilities and clients (see methods: resources() and shipping_cost()).
-        """
+    If the keys "shipping_cost" and/or "resources" are not provided, they are computed 
+    from the distances between facilities and clients (see methods: resources() and 
+    shipping_cost()).
+    """
+        
+    def __init__(self, param):
                 
         self.param = param
         self.n_facility_locations = self.param['pos_facility'].shape[0]
