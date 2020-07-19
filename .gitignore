@@ -131,9 +131,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-**/obsolete/
-**/logfile/
-**/notebooks/
-stochoptim/scenprob/notebooks/
-stochoptim/scenclust/notebooks/
-stochoptim/scenclust/notebooks/*
+#**/obsolete/
+#**/logfile/
+#**/notebooks/
+#stochoptim/scenprob/notebooks/
+#stochoptim/scenclust/notebooks/
+#stochoptim/scenclust/notebooks/*
