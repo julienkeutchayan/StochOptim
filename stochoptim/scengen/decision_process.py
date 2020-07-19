@@ -10,7 +10,7 @@ from stochoptim.scengen.tree_structure import Node
 # shortcuts for important types 
 Num = Union[int, float]
 SubscriptType = Union[int, str, Tuple[Union[int, str], ...]] # variable subscript
-FixedDecisionType = Union[int, float, None]
+FixedDecisionType = Optional[Num]
 ScenarioPathType = Dict[int, Dict[str, np.ndarray]]
 CallableDecisionType = Callable[[ScenarioPathType], FixedDecisionType]
 DecisionType = Union[FixedDecisionType, CallableDecisionType]
@@ -40,9 +40,7 @@ class DecisionProcess:
         self._initialize_decision_dict()
         
         if input_decision_dict is not None:
-            for stage in input_decision_dict.keys():
-                for var_name, array in input_decision_dict[stage].items():
-                    self.update_decision_array(array, stage, var_name)
+            self.update_decision_dict(input_decision_dict)                
                     
     # --- Properties ---
     @property
@@ -66,11 +64,21 @@ class DecisionProcess:
         for stage in self._map_dvar_to_index.keys():
             self._decision_dict[stage] = {}
             self._map_stage_to_dvar_nb[stage] = {}
-            for var_name, var_values in self._map_dvar_to_index[stage].items():
-                self._map_stage_to_dvar_nb[stage][var_name] = len(var_values.values())
+            for var_name, map_subscript_to_index in self._map_dvar_to_index[stage].items():
+                self._map_stage_to_dvar_nb[stage][var_name] = len(map_subscript_to_index.values())
                 self._decision_dict[stage][var_name] = np.array([None] * self._map_stage_to_dvar_nb[stage][var_name])
            
-    # --- Update decisions ---                                
+    # --- Update decisions ---         
+    def update_decision_dict(self, 
+                             new_decision_dict: Dict[int, Dict[str, List[DecisionType]]]):
+        for stage in self._map_dvar_to_index.keys():
+            if new_decision_dict.get(stage) is None:
+                continue
+            for var_name in self._map_dvar_to_index[stage].keys():
+                array = new_decision_dict[stage].get(var_name)
+                if array is not None:
+                    self.update_decision_array(array, stage, var_name)   
+                        
     def update_decision_array(self, 
                               new_decision_array: List[DecisionType], 
                               stage: int, 
@@ -180,4 +188,12 @@ class DecisionProcess:
                     str_ += f"      - {var_name}: {len(dict_.values())}\n"
         return str_
 
-        
+    @classmethod
+    def from_problem(cls, 
+                     stochastic_problem, 
+                     input_decision_dict: Optional[Dict[int, Dict[str, List[DecisionType]]]] = None):
+        assert hasattr(stochastic_problem, 'map_dvar_to_index'), ("The stochastic problem "
+        "must have an attribute `map_dvar_to_index`")
+        return cls(stochastic_problem.map_dvar_to_index, input_decision_dict)        
+
+from_problem = DecisionProcess.from_problem
