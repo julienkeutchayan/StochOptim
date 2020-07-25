@@ -4,7 +4,7 @@ multi-stage problems.
 
 Three main reasons why you would like to use it:
 * If you want an easy way to formulate your stochastic problem, represent its uncertainty via a scenario tree, 
-and generate/solve the equivalent deterministic program (EDP).
+and generate/solve the equivalent deterministic program.
 * If you want to build non-standard optimized scenario trees from given probability distributions (**scenario generation**)
 * If you want to build non-standard optimized scenario trees directly from historical data (**scenario clustering**)
 
@@ -14,7 +14,7 @@ By *optimized* we mean scenario trees with a branching structure that minimizes 
 suitability to the problem.
 
 The concept of building scenario trees suitable to the problem is gaining popularity over the past years. 
-Suitability is measured by the ability of the EDP to provide optimal decisions that are as close as possible from those 
+Suitability is measured by the ability of the equivalent deterministic program to provide optimal decisions that are as close as possible from those 
 of the original problem. It falls under the umbrella of **problem-driven methods**, which are opposed to 
 **distribution-driven methods** where suitability is defined with respect to the uncertainty and not the problem. 
 

@@ -7,11 +7,11 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="stochoptim",
-    version="0.0.7",
+    version="0.0.8",
     author="Julien Keutchayan",
     author_email="j.keutchayan@gmail.com",
     description=("StochOptim is a Stochastic Optimization package with scenario generation tools "
-                 "for two- and multi-stage problems"),
+                 "for two-stage and multi-stage problems"),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/julienkeutchayan/StochOptim",
