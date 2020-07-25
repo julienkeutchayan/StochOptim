@@ -36,5 +36,17 @@ for the **scenario clustering** part.
 
 ## Tutorials and Examples
 
+**Case studies:**
 * [Two-Stage Facility Location Problem](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Two-Stage%20Facility%20Location%20Problem.ipynb)
 * [Two-Stage Network Design Problem](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Two-Stage%20Network%20Design%20Problem.ipynb)
+* [Multistage Facility Location Problem](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Multistage%20Facility%20Location%20Problem.ipynb)
+
+**Scenario generation:**
+* [Tree Structures](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/1.%20Tree%20Structures.ipynb)
+* [Scenario Trees](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/2.%20Scenario%20Trees.ipynb)
+* [Scenario Trees with Optimized Scenarios](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/3.%20Scenario%20trees%20with%20optimized%20scenarios.ipynb)
+* [Scenario Trees with Optimized Scenarios and Structure (method #1)](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/4.%20Scenario%20trees%20with%20optimized%20scenarios%20and%20structure%20(method%20%231).ipynb)
+* [Scenario Trees with Optimized Scenarios and Structure (method #2)](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/5.%20Scenario%20trees%20with%20optimized%20scenarios%20and%20structure%20(method%20%232).ipynb)
+
+**Scenario clustering:**
+* [Two-Stage Scenario Clustering](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Two-Stage%20Scenario%20Clustering.ipynb)
