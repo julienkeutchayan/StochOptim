@@ -485,8 +485,8 @@ class StochasticProblemBasis(ABC):
               solve_problem: bool = True,
               tree_filename: Optional[str] = None,
               tree_extension: str = 'txt',
-              with_keys: List[str] = None,
-              without_keys: List[str] = None,
+              with_keys: Optional[List[str]] = None,
+              without_keys: Optional[List[str]] = None,
               **kwargs) -> Union[StochasticSolutionBasis, List[StochasticSolutionBasis]]:
         """ Main method to solve the stochastic problem on one or several scenario trees.
         
@@ -642,7 +642,7 @@ class StochasticProblemBasis(ABC):
         return self.solve(*decompose(scenario_tree), **kwargs)
         
     def compute_opportunity_cost(self, 
-                                 scenario_tree, 
+                                 scenario_tree: ScenarioTree, 
                                  return_matrix=False,
                                  relaxation_step1=False,
                                  relaxation_step2=False,

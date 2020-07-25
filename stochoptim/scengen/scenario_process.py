@@ -89,9 +89,9 @@ class ScenarioProcess:
                 f"The numpy array of weights must be a 1-dimensional, not of dimension {len(weights.shape)}"
             if epsilons is not None:
                 assert isinstance(epsilons, np.ndarray), \
-                    "The discretization points (epsilons) must be given as a 2d numpy array, not as type {type(epsilons)}"
+                    f"The discretization points (epsilons) must be given as a 2d numpy array, not as type {type(epsilons)}"
                 assert len(epsilons.shape) == 2, \
-                    "The numpy array of discretization points (epsilons) must be 2d, not of dimension {len(epsilons.shape)}"
+                    f"The numpy array of discretization points (epsilons) must be 2-dimensional, not {len(epsilons.shape)}-dimensional"
                 assert weights.shape[0] == epsilons.shape[0], ("Mismatch between the number of discretization weights "
                 f"({weights.shape[0]}) and points ({epsilons.shape[0]}).")
         return weights, epsilons

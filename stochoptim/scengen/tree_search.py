@@ -21,7 +21,8 @@ class TreeSearch:
         self.nber_stages = nber_stages
         self.last_stage = nber_stages - 1
         
-        self._search_methods = ["VNS", "EXH"]
+        self._search_methods = [("VNS", "forward"), ("VNS", "backward"), 
+                                ("EXH", "forward"), ("EXH", "backward")]
         self._best_fod = {}
         self._best_tree = {}
         self._fod_sample = {}
@@ -61,7 +62,6 @@ class TreeSearch:
         
     def variable_neighborhood_search(self, 
                                     nber_scenarios, 
-                                    disc_method, 
                                     initial_tree=None,
                                     optimized='forward', 
                                     max_iteration=np.inf,
@@ -71,25 +71,27 @@ class TreeSearch:
                                     neighborhood_shrink=0):
         """Explore the space of tree structures via a strategy of 'variable neighborhood' to find the scenario tree 
         of lowest demerit"""
-        self._initialize('VNS')
+        assert optimized in ["forward", "backward"], ("`optimized` must be either 'forward' or "
+        f"'backward', not {optimized}.")
+        self._initialize(('VNS', optimized))
         time0 = time()
         if initial_tree is None:
             bushiness = (nber_scenarios,) + (1,) * (self.nber_stages-2)
-            initial_tree = ScenarioTree.from_bushiness(bushiness, self.scenario_process)
-            initial_tree.fill(disc_method, optimized, self.variability_process, self.demerit)
+            initial_tree = ScenarioTree.from_bushiness(bushiness)
+            initial_tree.fill(self.scenario_process, optimized, self.variability_process, self.demerit)
             
-        self._best_fod["VNS"] = initial_tree.get_figure_of_demerit(self.demerit)
-        self._best_tree["VNS"] = copy.deepcopy(initial_tree)
+        self._best_fod[('VNS', optimized)] = initial_tree.get_figure_of_demerit(self.demerit)
+        self._best_tree[('VNS', optimized)] = copy.deepcopy(initial_tree)
         
         if initial_tree.depth <= 2:
-            return self._best_tree["VNS"], self._best_fod["VNS"]
+            return self._best_tree[('VNS', optimized)], self._best_fod[('VNS', optimized)]
     
         iteration, no_improvement_count = 0, 0
         while iteration < max_iteration:
             try:
                 iteration += 1
                 nbreed = 1 #max(1, int(nber_scenarios / np.log(3*iteration)**neighborhood_shrink))
-                candidates = [copy.deepcopy(self._best_tree["VNS"]) for i in range(num_local_samples)]
+                candidates = [copy.deepcopy(self._best_tree[('VNS', optimized)]) for i in range(num_local_samples)]
     
                 # increase neighborhood distance until improvement
                 for neighborhood in range(1, num_neighborhoods + 1):
@@ -101,14 +103,14 @@ class TreeSearch:
                         for ibreed in range(nbreed):
                             TreeSearch._tree_breed(current_tree) # split or merge
         
-                        current_tree.fill(disc_method, optimized, self.variability_process, self.demerit)
+                        current_tree.fill(self.scenario_process, optimized, self.variability_process, self.demerit)
                         current_fod = current_tree.get_figure_of_demerit(self.demerit)
-                        self._fod_sample["VNS"].append(current_fod)
+                        self._fod_sample[('VNS', optimized)].append(current_fod)
                         
-                        if current_fod < self._best_fod["VNS"]:
+                        if current_fod < self._best_fod[('VNS', optimized)]:
                             improved = True
-                            self._best_tree["VNS"] = current_tree
-                            self._best_fod["VNS"] = current_fod
+                            self._best_tree[('VNS', optimized)] = current_tree
+                            self._best_fod[('VNS', optimized)] = current_fod
                         
                     # start over if at least one sample provided improvement
                     if improved:
@@ -121,7 +123,7 @@ class TreeSearch:
                         break
                     
                 print(f"\riteration: {iteration}  demerit: {current_fod:.5f}  "
-                      f"best demerit: {self._best_fod['VNS']:.5f}  "
+                      f"best demerit: {self._best_fod[('VNS', optimized)]:.5f}  "
                        f"no improvement count: {no_improvement_count}", end="")  
                 
             except KeyboardInterrupt:
@@ -176,27 +178,28 @@ class TreeSearch:
             
     def exhaustive_search(self, 
                           nber_scenarios, 
-                          disc_method, 
-                          optimized='forward', 
+                          optimized='forward',
                           min_branching_factor=1, 
                           max_iteration=np.inf):
         """Explore exhaustively the space of tree structures to find the scenario tree of lowest demerit"""
-        self._initialize('EXH')
+        assert optimized in ["forward", "backward"], ("`optimized` must be either 'forward' or "
+        f"'backward', not {optimized}.")
+        self._initialize(('EXH', optimized))
         time0 = time()
         iteration_count, no_improvement_count = 1, 0
 
         for structure in TreeSearch._exhaustive_structures(self.nber_stages, nber_scenarios, min_branching_factor):   
             try:
-                current_tree = ScenarioTree(structure, self.scenario_process)
-                current_tree.fill(disc_method, optimized, self.variability_process, self.demerit)
+                current_tree = ScenarioTree(structure)
+                current_tree.fill(self.scenario_process, optimized, self.variability_process, self.demerit)
                 
                 current_fod = current_tree.get_figure_of_demerit(self.demerit)
-                self._fod_sample["EXH"].append(current_fod)
+                self._fod_sample[('EXH', optimized)].append(current_fod)
                 
-                if current_fod < self._best_fod["EXH"]:
+                if current_fod < self._best_fod[('EXH', optimized)]:
                     improved = True
-                    self._best_tree["EXH"] = current_tree
-                    self._best_fod["EXH"] = current_fod
+                    self._best_tree[('EXH', optimized)] = current_tree
+                    self._best_fod[('EXH', optimized)] = current_fod
                 else:
                     improved = False
                     
@@ -204,7 +207,7 @@ class TreeSearch:
                     
                 if iteration_count % 10 == 0:
                     print(f"\riteration: {iteration_count}  demerit: {current_fod:.5f}  "
-                          f"best demerit: {self._best_fod['EXH']:.5f}  "
+                          f"best demerit: {self._best_fod[('EXH', optimized)]:.5f}  "
                            f"no improvement count: {no_improvement_count}", end="")        
             except KeyboardInterrupt:
                 break
