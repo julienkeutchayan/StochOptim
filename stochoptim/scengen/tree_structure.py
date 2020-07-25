@@ -4,7 +4,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from typing import List, Callable, Any
+from typing import List, Callable, Any, Dict, Tuple, Sequence
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -155,6 +155,15 @@ class Node:
                     return False
         return True
         
+    def node_at_address(self, address):
+        """Returns the node located at an address (returns None if no node is at this address)."""
+        if address == ():
+            return self
+        if len(self.children) <= address[0]:
+            return None
+        else:
+            return self.children[address[0]].node_at_address(address[1:])
+        
     # --- Iterables ---
     def nodes_at_level(self, t):
         """Returns an iterator on the nodes at level t in the subtree rooted at self"""
@@ -217,15 +226,6 @@ class Node:
         for c in self.children:
             tree.add(c.copy())
         return tree
-    
-    def node_at_address(self, address):
-        """Returns the node located at an address (returns None if no node is at this address)."""
-        if address == ():
-            return self
-        if len(self.children) <= address[0]:
-            return None
-        else:
-            return self.children[address[0]].node_at_address(address[1:])
 
     def add(self, *children):
         """Adds a child to the structure."""
@@ -399,74 +399,10 @@ class Node:
             with open(path, "rb") as f:
                 data_dict = pickle.load(f)
         return cls.from_data_dict(data_dict)
-
-    def to_txt_file(self, filename, id, data):
-        """id: data field that contains the node identifier (sous la forme 'key' avec key la clé permettant d'identifier un noeud;
-        data: data fields to record (sous la forme ['key1','key2',...], avec keyi les clés qui identifient les données)
-        Attention toutes les valeurs dans data sont des strings! Pour avoir des nombres il faut utiliser l'argument "convs" de from_file ci-dessus (cf rvst.py pour un exemple)"""
-        with open(filename, 'w') as f:
-            print("\t\t\t".join(["n"] + data) + "\t\t\tchildren", file=f)
-            #print("\t\t".join(["n"] + data) : introduit une double tabulation entre "n" et data
-            for node in self.nodes:
-                #if node.is_leaf:
-                #    continue
-                children = ",".join(str(n.data[id]) for n in node.children)
-                print("\t\t\t".join(str(node.data.get(x,"")) for x in [id] + data) + "\t\t\t" + children, file=f)
-                
-    @staticmethod
-    def from_txt_file(filename, convs={}, id=None): 
-        """Pour créer un arbre à partir d'un fichier. Attention la sortie est une liste 
-        convs sert à convertir en nombre certaines valeurs du dictionnaire qui sont de base en string (cf rvst.py pour voir comment l'utiliser)"""
-        orphans = {}
-        children = []
-        fields = []
-        with open(filename) as f:
-            for line in f:
-                #tokens = line.strip().split("\t") #
-                tokens = [x.strip() for x in line.split("\t")] # enlever changement de ligne sur le dernier
-                if not fields:
-                    fields = tokens[1:-1]
-                    for k in fields:
-                        if k not in convs:
-                            convs[k] = lambda x: x
-                    if id and id not in convs:
-                        convs[id] = lambda x: x
-                else:
-                    label = tokens[0]
-
-                    # create node
-                    node = Node()
-                    if id:
-                        node.data[id] = convs[id](label)
-                    for k, t in zip(fields, tokens[1:-1]):
-                        node.data[k] = convs[k](t)
-
-                    orphans[label] = node
-
-                    # si pas de fils listés dans le fichier, on va avoir une chaîne vide
-                    # alors on la remplace par une liste vide
-                    if not tokens[-1]:
-                        node_children = []
-                    else:
-                        node_children = tokens[-1].split(",")
-
-                    children.append((node, node_children))
-
-        # build tree
-        for node, labels in children:
-            for label in labels:
-                if label in orphans:
-                    n = orphans.pop(label)
-                else:
-                    n = Node()
-                    if id:
-                        n.data[id] = convs[id](label)
-                node.add(n)
-        return list(orphans.values())  #list() créer une copie de la liste orphans.values
     
     # --- Alternative constructors ---
     @classmethod
-    def from_data_dict(cls, data_dict):
+    def from_data_dict(cls, data_dict: Dict[Tuple[int], dict]):
         """Constructor of a tree from a dictionary that maps each node address to its node data.
         It is the reverse of the .get_data_dict() method, i.e., tree = from_data_dict(tree.get_data_dict())"""
         tree = cls._from_addresses(list(data_dict.keys()))    
@@ -482,10 +418,12 @@ class Node:
         Arguments:
         ----------
         addresses: list of tuples
-            Each tuple corresponds to the address of a node in the structure (as would be given by node.address()).
+            Each tuple corresponds to the address of a node in the structure (as would be given 
+            by node.address()).
         
         Returns:
-            An instance of Node.
+        --------
+        Node: the root node of the specified tree structure
         """
         root = cls()
         for address in addresses:
@@ -496,38 +434,41 @@ class Node:
         return root
 
     @classmethod
-    def from_topology(cls, topology, tree=None):
+    def from_topology(cls, topology: Sequence[Sequence[int]], _tree=None):
         """
         Constructor of a tree structure from a topology. 
         A topology is the most general way to build any possible type of structure.
         
         Arguments:
         ----------
-        topology: tuple of integers nested into (possibly several) layers of tuples.
-            The integers are the number of sibling leaves. Integers (and sub-tuples) are inside the same tuple if
-            they have the same parent. 
-            For instance: ((1,2), (2,1,2))
+        topology: tuple/list of int nested into (possibly several) layers of tuple/list.
+            The integers are the number of sibling leaves. Integers (and sub-tuples) are inside 
+            the same tuple if they have the same parent. 
         
-        tree: instance of Node
-            If given, the newly generated structure is appended to tree, otherwise it is built from scratch.
+        _tree: unused argument (internally used for the recurrent calls to the method)
             
         Returns:
-            An instance of Node.
+        --------
+        Node: the root node of the specified tree structure
         """
-        if tree is None:
-            tree = cls()
+        if _tree is None:
+            _tree = cls()
         if isinstance(topology, int):
-            tree.add(*[cls() for i in range(topology)])
-            return tree
+            _tree.add(*[cls() for i in range(topology)])
+            return _tree
         else: 
-            if tree.is_leaf:
-                tree.add(*[cls() for i in range(len(topology))]) 
-            for item, leaf in zip(topology, list(tree.leaves)):
+            if _tree.is_leaf:
+                _tree.add(*[cls() for i in range(len(topology))]) 
+            for item, leaf in zip(topology, list(_tree.leaves)):
                 cls.from_topology(item, leaf)
-            return tree
+            return _tree
         
     @classmethod
-    def from_recurrence(cls, max_level, init, recurrence, tree=None):
+    def from_recurrence(cls, 
+                        max_level: int, 
+                        init: int, 
+                        recurrence: Dict[int, Sequence[int]], 
+                        _tree=None):
         """
         Constructor of a tree structure where the number of child nodes satisfies a recurrence relation.
         
@@ -543,6 +484,8 @@ class Node:
             All integers must be positive and correspond to the number of sibling nodes. 
             (Each integers found in the dict values must also be found in the keys.)
             
+        _tree: unused argument (internally used for the recurrent calls to the method)
+
         Example:     
             recurrence = {1: (2,), 2: (1,3), 3: (1,2,3)}) 
             will produce a tree where:
@@ -551,22 +494,23 @@ class Node:
                 - 3 sibling nodes will give birth to 1, 2, and 3 children.
 
         Returns:
-            An instance of Node.
+        --------
+        Node: the root node of the specified tree structure
         """
-        if tree is None:
-            tree = cls(*[cls() for _ in range(init)])
+        if _tree is None:
+            _tree = cls(*[cls() for _ in range(init)])
         else:
-            tree.add(*[cls() for _ in range(init)])
+            _tree.add(*[cls() for _ in range(init)])
         if max_level == 1:
-             return tree
+             return _tree
         else:
-            for i, node in enumerate(tree.children):
+            for i, node in enumerate(_tree.children):
                 if node.is_leaf:
-                    cls.from_recurrence(max_level-1, recurrence[len(tree.children)][i], recurrence, node)
-            return tree
+                    cls.from_recurrence(max_level-1, recurrence[len(_tree.children)][i], recurrence, node)
+            return _tree
     
     @classmethod
-    def from_bushiness(cls, bushiness):
+    def from_bushiness(cls, bushiness: Sequence[int]):
         """
         Constructor of a tree structure with a time-dependent branching factor.
         
@@ -576,7 +520,9 @@ class Node:
             Integer at location i in the tuple is the branching factor at the i-th level
             
         Returns:
-            An instance of Node."""
+        --------
+        Node: the root node of the specified tree structure
+        """
         integer_bushiness = np.array(bushiness).astype('int')
         assert (np.array(bushiness) == integer_bushiness).all(), \
             f"The bushiness must only contain integer values, not {bushiness}"
@@ -729,8 +675,8 @@ class Node:
         **kwargs: 
             All keyword args of .plot() except 'ax', 'figsize' and 'to_file'.
         """
+        assert len(trees) > 1, "There must be 2 trees at least"
         kwargs.pop('ax', None), kwargs.pop('figsize', None), kwargs.pop('to_file', None)
-        
         if along_x:
             fig, axes = plt.subplots(1, len(trees), figsize=figsize)
         else:
@@ -764,7 +710,9 @@ class Node:
         return s1
 
 get_data_path = Node.get_data_path
-bushiness_from_width = Node.bushiness_from_width 
+bushiness_from_width = Node.bushiness_from_width
 from_file = Node.from_file
-
-
+from_data_dict = Node.from_data_dict
+from_topology = Node.from_topology
+from_recurrence = Node.from_recurrence
+from_bushiness = Node.from_bushiness
