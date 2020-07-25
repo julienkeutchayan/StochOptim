@@ -16,7 +16,8 @@ class VariabilityProcess:
                  lookback_fct: Optional[Callable[[int, ScenarioPathType], float]] = None, 
                  looknow_fct: Optional[Callable[[int, np.ndarray], float]] = None, 
                  average_fct: Optional[Callable[[int], float]] = None, 
-                 name: Optional[str] = None):
+                 name: Optional[str] = None,
+                 checker: bool = True):
         """
         Arguments:
         ----------
@@ -36,6 +37,7 @@ class VariabilityProcess:
         self._looknow_fct = looknow_fct
         self._average_fct = average_fct
         self._name = name
+        self._checker = checker
         
     def has_lookback(self) -> bool:
         return self._lookback_fct is not None
@@ -65,7 +67,11 @@ class VariabilityProcess:
         --------
         float >= 0: Value of variability.
         """
-        return self._lookback_fct(stage, scenario_path)
+        varability = self._lookback_fct(stage, scenario_path)
+        if self._checker:
+            assert isinstance(varability, (int, float)) or varability.shape == (), \
+            f"The `lookback_fct` function must return an int or float, not {type(varability)}"
+        return varability
     
     def looknow(self, stage: int, epsilon: np.ndarray) -> float:
         r""" Path-independent variability function. 
@@ -86,7 +92,11 @@ class VariabilityProcess:
         --------
         float >= 0: Value of variability.
         """
-        return self._looknow_fct(stage, epsilon)
+        varability = self._looknow_fct(stage, epsilon)
+        if self._checker:
+            assert isinstance(varability, (int, float)) or varability.shape == (), \
+            f"The `looknow_fct` function must return an int or float, not {type(varability)}"
+        return varability
             
     def average(self, stage: int) -> float:
         r""" Average variability, defined as the expectation of the path-dependent variability under the scenario
@@ -104,21 +114,25 @@ class VariabilityProcess:
         --------
         float >= 0: Average variability
         """
-        return self._average_fct(stage)
-
+        varability = self._average_fct(stage)
+        if self._checker:
+            assert isinstance(varability, (int, float)) or varability.shape == (), \
+            f"The `average_fct` function must return an int or float, not {type(varability)}"
+        return varability
+ 
     def node_lookback(self, node: Node) -> float:
         """Same as `lookback` but callable on a node"""
-        if node.is_leaf:
-            return 0
-        else:
-            return self.lookback(node.level, get_data_path(node, 'scenario'))
+      #  if node.is_leaf:
+      #      return 0
+      #  else:
+        return self.lookback(node.level, get_data_path(node, 'scenario'))
     
     def node_looknow(self, node: Node) -> float:
         """Same as `looknow` but callable on a node"""
-        if node.is_leaf:
-            return 0
-        else:
-            return self.looknow(node.level, node.data.get('eps'))
+     #   if node.is_leaf:
+     #       return 0
+     #   else:
+        return self.looknow(node.level, node.data.get('eps'))
       
     @classmethod
     def from_scenario_tree(cls, scenario_tree, across_tree: bool) -> 'VariabilityProcess':
