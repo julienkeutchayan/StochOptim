@@ -79,10 +79,10 @@ class ScenarioTree(Node):
         ----------           
         optimized: {'forward', 'backward', None}
             The way the scenario tree is filled with scenarios and weights.
-            If 'forward', the assignment of scenarios to nodes is optimized from the root to the leaves, and it is
-            guided by the scenario values (under data key 'scenario').
-            If 'backward', the assignment of scenarios to nodes is optimized from the leaves to the root, and it is 
-            guided by the epsilon values (under data key 'eps').
+            If 'forward', the assignment of scenarios to nodes is optimized from the root to 
+            the leaves, and it is guided by the scenario values (under data key 'scenario').
+            If 'backward', the assignment of scenarios to nodes is optimized from the leaves 
+            to the root, and it is guided by the epsilon values (under data key 'eps').
             If None, the assignment is not optimized.
         
         scenario_process: ScenarioProcess
@@ -206,13 +206,14 @@ class ScenarioTree(Node):
             The variability process used to guide the assignement of scenarios to nodes.
             
         alpha: float > 0
-                
+            Convergence rate of the discretization method (typically from 0.5 to 2).
+            
         Returns:
         --------
         ScenarioTree
         """
-        assert variability_process.has_average, \
-            "The variability process must have an `average` method for the forward-generation algorithm."
+        assert variability_process.has_average(), \
+            "The variability process must have an `average_fct` method for the forward-generation algorithm."
         avg_variability = [variability_process.average(stage) for stage in range(n_stages-1)]
         width_vector = cls.optimal_width_vector(n_scenarios, alpha, avg_variability)
         return cls.forward_generation_from_given_width(width_vector, scenario_process, variability_process, alpha)
@@ -236,6 +237,7 @@ class ScenarioTree(Node):
             The variability process used to guide the assignement of scenarios to nodes.
             
         alpha: float > 0
+            Convergence rate of the discretization method (typically from 0.5 to 2).
                 
         Returns:
         --------
@@ -245,7 +247,7 @@ class ScenarioTree(Node):
         tree = cls.from_data_dict({(): {"M": width_vector[0], "W": 1, "w": 1}})       
         root_scenario = scenario_process.get_node_scenario(tree, path=False)
         if root_scenario is not None:
-            tree.data["scenario"] = root_scenario                    
+            tree.data["scenario"] = root_scenario             
         tree.data["g"] = variability_process.node_lookback(tree)
         
         # difference between the actual width of the leaves and the target one
@@ -264,7 +266,7 @@ class ScenarioTree(Node):
                 normalization = sum((leaf.data["W"] * leaf.data["g"])**(1/(alpha+1)) for leaf in tree.leaves)
                 for leaf in tree.leaves:
                     leaf.data["m"] = (width_vector[stage] / normalization) \
-                                        * (leaf.data["W"] * leaf.data["g"])**(1/(alpha+1)) 
+                                        * (leaf.data["W"] * leaf.data["g"])**(1/(alpha+1))
                     leaf.data["M"] = int(max(1, round(leaf.data["m"])))
 
             # 3. Correct the rounding off of the number of child nodes (if necessary) so that the actual width 
@@ -505,32 +507,47 @@ class ScenarioTree(Node):
     
     # --- Plots ---
     def plot(self, 
-             rvar_name: Optional[Union[str, Dict[int, str]]] = None, 
-             decimals_weights: int = 3,
+             var_name: Optional[Union[str, Dict[int, str]]] = None, 
+             scenario_precision: int = 2,
+             format_weights: str = '.3f',
              **kwargs):
-        if rvar_name is None:
-            rvar_name = {stage: var_names[0] for stage, var_names in self.map_stage_to_rvar_names.items()}
-        elif isinstance(rvar_name, str):
-            rvar_name = {stage: rvar_name for stage in self.map_stage_to_rvar_names.keys()}
-            
-        def print_on_nodes(node):
-            scenario = node.data.get('scenario')
-            if scenario is None:
-                return ''
-            else:
-                if rvar_name.get(node.level) in scenario.keys():
-                    return repr(scenario[rvar_name[node.level]])
+        if var_name is None:
+            print_on_nodes = None
+        elif isinstance(var_name, str):
+            def print_on_nodes(node):
+                if node.data.get('scenario') is None:
+                    return ""
+                elif node.data['scenario'].get(var_name) is None:
+                    return ""
                 else:
-                    return ''
-                
+                    return np.array_str(node.data.get('scenario').get(var_name), 
+                                        precision=scenario_precision)
+        else:
+            def print_on_nodes(node):
+                if node.data.get('scenario') is None:
+                    return ""
+                elif var_name.get(node.level) is None:
+                    return ""
+                elif node.data['scenario'].get(var_name[node.level]) is None:
+                    return ""
+                else:
+                    return np.array_str(node.data['scenario'][var_name[node.level]], 
+                                        precision=scenario_precision)
+            
+        def print_on_edges(node):
+            if node.data.get('W') is not None:
+                return f"{node.data.get('W'):{format_weights}}"
+            else:
+                return ""
+
         super().plot(print_on_nodes=print_on_nodes,
-                     print_on_edges=lambda node: repr(round(node.data.get('W', ''), decimals_weights)),
+                     print_on_edges=print_on_edges,
                      **kwargs)
     
     def plot_scenarios(self, 
                        var_name,
                        component=0,
-                       figsize=(10,7),
+                       figsize=(10,5),
                        color=None):                
         fig, ax = plt.subplots(figsize=figsize)
         i = 0
@@ -552,6 +569,7 @@ class ScenarioTree(Node):
         
     def plot_hist(self, 
                   stage,
+                  var_name,
                   component=0,
                   bins=10,
                   figsize=(5,5),
@@ -562,7 +580,7 @@ class ScenarioTree(Node):
         assert stage <= self.depth-1, f"Stage {stage} is higher than maximum scenario-tree stage {self.depth-1}."
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
-        hist_data = [node.data["scenario"][component] for node in self.nodes_at_level(stage)]
+        hist_data = [node.data["scenario"][var_name][component] for node in self.nodes_at_level(stage)]
         hist_weight = [node.data["W"] for node in self.nodes_at_level(stage)]
         ax.hist(hist_data, bins=bins, density=True, weights=hist_weight)
         # empirical mean and std
