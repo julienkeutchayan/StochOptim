@@ -34,6 +34,7 @@ class ApproximateProblem:
                  warmstart: Dict[str, Union[float, int]] = None, 
                  find_only_feasibility=False,
                  with_variable_name=False,
+                 objective_type='path',
                  verbose=3,
                  check_sanity=True,
                  check_fixed_constraints=False,
@@ -121,6 +122,7 @@ class ApproximateProblem:
         self.remove_constraints = remove_constraints
         self.precompute_parameters = precompute_parameters
         self.precompute_decisions = precompute_decisions
+        self.objective_type = objective_type
         self.verbose = verbose
         self.check_sanity = check_sanity
         self.check_fixed_constraints = check_fixed_constraints
@@ -228,10 +230,17 @@ class ApproximateProblem:
             with _timeit(self, f"\r{space}Define objective function at subtree #{index}... ", display_level, index):
                 if self.find_only_feasibility:
                     model.set_objective(self._stochastic_problem.objective_sense, 0) 
-                else:                    
-                    model.set_objective(self._stochastic_problem.objective_sense, 
-                                        self._docplex_models[subroot.address].sum((leaf.data["W"] / subroot.data["W"]) *
-                                        self._stochastic_problem.objective_path(leaf, model) for leaf in subroot.leaves)) 
+                else:       
+                    if self.objective_type == 'node':
+                        model.set_objective(self._stochastic_problem.objective_sense, 
+                                            self._docplex_models[subroot.address].sum((node.data["W"] / subroot.data["W"]) *
+                                            self._stochastic_problem.objective_node(node, model) for node in subroot.nodes)) 
+                    elif self.objective_type == 'path':
+                        model.set_objective(self._stochastic_problem.objective_sense, 
+                                            self._docplex_models[subroot.address].sum((leaf.data["W"] / subroot.data["W"]) *
+                                            self._stochastic_problem.objective_path(leaf, model) for leaf in subroot.leaves))
+                    else:
+                        raise ValueError(f"`objective_type` must be either 'path' or 'node', not {self.objective_type}")
     
     def add_deterministic_constraints(self):
         """Add the deterministic constraints in the docplex models"""

@@ -152,10 +152,6 @@ class StochasticProblemBasis(ABC):
         pass
     
     @abstractmethod
-    def objective(self):
-        pass
-    
-    @abstractmethod
     def deterministic_linear_constraints(self, stage):
         pass
     
@@ -173,6 +169,12 @@ class StochasticProblemBasis(ABC):
     
     @abstractmethod
     def sanity_check(self, stage):
+        pass
+    
+    def objective(self):
+        pass
+    
+    def objective_by_stage(self):
         pass
     
     def deterministic_indicator_constraints(self, stage):
@@ -238,6 +240,18 @@ class StochasticProblemBasis(ABC):
              ('random', 'linear'): self.random_linear_constraints(node.level),
              ('random', 'indicator'): self.random_indicator_constraints(node.level)}
             
+    def average_over_distribution(self, expression: Callable[[], Any], stage: int):
+        """Average an expression over all the nodes at a given stage that are in the subtree of
+        the underlying node from which the function is called (a.k.a. `self._node`)"""
+        avg = 0
+        for n in self._node.nodes_at_level(stage):
+            self._decision_path = Node.get_data_path(n, 'decision', default={})
+            self._scenario_path = ScenarioTree.get_scenario_path(n)
+            self._memory_path = Node.get_data_path(n, 'memory', default={})
+            avg += (n.data['W'] / self._node.data['W']) * expression()
+        self.set_path_info(self._node)
+        return avg
+    
     def generate_node_constraints(self, node, ct_type, model=None, remove_constraints=None):
         """
         ct_type: tuple (a, b) where a is 'deterministic' or 'random' and b is 'linear' or 'indicator'.
@@ -277,6 +291,10 @@ class StochasticProblemBasis(ABC):
         self.set_path_info(leaf, model)
         return self.objective()
 
+    def objective_node(self, node, model=None):
+        self.set_path_info(node, model)
+        return self.objective_by_stage(node.level)
+    
     # --- check constraints validity ---
     def _inspect_linear_constraint(self, ct_tuple):
         # check the tuple input
@@ -480,6 +498,7 @@ class StochasticProblemBasis(ABC):
               warmstart: Optional[Dict[str, Union[float, int]]] = None,
               find_only_feasibility: bool = False,
               with_variable_name: bool = False,
+              objective_type: str = 'path',
               verbose: int = 3,
               mip_filename: Optional[str] = None,
               solve_problem: bool = True,
@@ -523,6 +542,8 @@ class StochasticProblemBasis(ABC):
         with_variable_name: bool (default: False)
             If True, the model will refer to the variables by their own names as given in the problem's definition.
             
+        objective_type: {'path', 'node'} (default: 'path')
+        
         verbose: {0, 1, 2, 3} (default: 3)
                 
         mip_filename: str or None (default: None)
@@ -594,6 +615,7 @@ class StochasticProblemBasis(ABC):
                                                  remove_constraints=remove_constraints,
                                                  warmstart=warmstart,
                                                  find_only_feasibility=find_only_feasibility,
+                                                 objective_type=objective_type,
                                                  verbose=verbose,
                                                  **kwargs)
         
