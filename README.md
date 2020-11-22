@@ -36,12 +36,13 @@ for the **scenario clustering** part.
 
 ### Dependencies
 
-* `docplex` (version >= '2.9.133')
+* `docplex` (version >= 2.9.133)
 
 ## Basic Usage
 
 Let's consider the following multistage stochastic optimization problem:
-![](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/multistage_problem.PNG) 
+
+![https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/multistage_problem.PNG](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/multistage_problem.PNG) 
 
 To solve it:
 
@@ -140,7 +141,9 @@ solution.scenario_tree.plot(lambda node: np.round(node.data['decision'].get('x')
 axes[3].axis('off')
 solution.scenario_tree.plot(lambda node: np.round(node.data['v'], 3), ax=axes[4])
 ```
-![](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/scenario_tree_solution.png) 
+
+![https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/scenario_tree_solution.png](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/scenario_tree_solution.png) 
+
 **Left**: values and probabilities of the 3-dimensional random parameter 'd'. \
 **Middle**: optimal decisions 'x'. \
 **Right**: optimal objective values (at the root node and conditionally on the scenarios)
