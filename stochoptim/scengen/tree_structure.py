@@ -4,7 +4,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from typing import List, Callable, Any, Dict, Tuple, Sequence
+from typing import List, Callable, Any, Dict, Tuple, Sequence, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -220,8 +220,9 @@ class Node:
     
     # --- Structure update ---
     def copy(self):
-        """Copy the structure of the tree. This copies the references to the nodes, but the data at each node still 
-        points to the same object (i.e., this is not a deepcopy of the data attribute)."""
+        """Copy the structure of the tree. This copies the references to the nodes, but the 
+        data at each node still points to the same object (i.e., this is not a deepcopy of the 
+        data attribute)."""
         tree = Node(**self.data)
         for c in self.children:
             tree.add(c.copy())
@@ -242,16 +243,19 @@ class Node:
             raise Exception("cannot remove root")
 
     def remove_branch(self):
-        """Same as remove() but additionally keep deleting nodes backwards along the path leading to self if those 
-        nodes don't have children. This deletion ensures that the tree leaves are all at the same level."""
+        """Same as remove() but additionally keep deleting nodes backwards along the path 
+        leading to self if those nodes don't have children. This deletion ensures that the 
+        tree leaves are all at the same level."""
         p = self.parent
         self.remove()
         if p.is_leaf:
             p.remove_branch()
             
     # --- Data update ---        
-    def delete_data(self, keys):
-        """keys is a list of strings"""
+    def delete_data(self, keys: Union[str, List[str]]):
+        """Delete all data under certain keys"""
+        if isinstance(keys, str):
+            keys = list(keys)
         for node in self.nodes:
             for key in keys:
                 if node.data.get(key) is not None:
@@ -310,8 +314,7 @@ class Node:
         if with_keys is not None:
             keys_to_keep = lambda node: set(with_keys)
         else:
-            keys_to_keep = lambda node: set(node.data.keys()) - set(without_keys)
-            
+            keys_to_keep = lambda node: set(node.data.keys()) - set(without_keys)  
         return {node.address: {key: value for key, value in node.data.items()
                                        if key in keys_to_keep(node)} for node in self.nodes}
 
@@ -564,7 +567,7 @@ class Node:
             tree = self
             
         if max_stage is not None:
-            tree = self.copy()
+            tree = tree.copy()
             for node in list(tree.nodes_at_level(max_stage+2)):
                 node.remove()
         else:
@@ -623,13 +626,14 @@ class Node:
     
         # plot the edges
         for node in tree.nodes:
+            if node.level == max_stage+1:
+                continue
+                
             if node.parent:
                 x = [node.level, node.parent.level]
                 y = [pos_y[node.address], pos_y[node.parent.address]]
                 ax.plot(x, y, color=color_edges_fct(node), linewidth=width_edges_fct(node))
                 
-                if node.level == max_stage+1:
-                    continue
                 # write text on edge if required
                 txt = print_on_edges(node)
                 if txt is not None:

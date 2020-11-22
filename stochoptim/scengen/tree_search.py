@@ -5,7 +5,6 @@ import numpy as np
 import copy
 import itertools
 from time import time
-import numpy as np
 import matplotlib.pyplot as plt
 
 from stochoptim.scengen.tree_structure import Node

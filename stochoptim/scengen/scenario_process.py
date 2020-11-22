@@ -46,7 +46,7 @@ class ScenarioProcess:
                  epsilons_fct: Optional[Callable[[int, int], np.ndarray]] = None, 
                  weights_fct: Optional[Callable[[int, int], np.ndarray]] = None,
                  name: Optional[str] = None,
-                 checker: bool = False,
+                 checker: bool = True,
                  stochastic_problem: Optional['StochasticProblemBasis'] = None):  
         """
 
@@ -126,7 +126,8 @@ class ScenarioProcess:
         scenario = self._scenario_fct(stage, epsilon, scenario_path)
         if self._checker and stage >= 1: # we don't check the scenario at stage 0 (at the root)
             assert isinstance(scenario, dict), \
-                "A scenario must be a dictionary mapping the variable names (str) to the variable arrays (1d-array)"
+                ("A scenario must be a dictionary mapping the variable names (str) to the variable arrays (1d-array)\n"
+                 f"Here scenario was of type {type(scenario)}: {scenario}")
             if self._map_rvar_name_to_nb is not None:
                 assert set(scenario.keys()) == set(self._map_rvar_name_to_nb[stage].keys()), \
                     (f"Mismatch between the variable names given in the problem at stage {stage}: "

@@ -49,9 +49,9 @@ class ApproximateProblem:
         
         Arguments:
         ----------
-        scenario_tree: list of ScenarioTree instances
-            The scenario trees must have the same topology and the same node routing. They must be filled with 
-            data values 'scenario' at every level >= 1 and weights 'W' at every level >= 0.
+        scenario_tree: instance of ScenarioTree
+            The scenario tree must be filled with data values 'scenario' at every level >= 1 
+            and weights 'W' at every level >= 0.
             
         stochastic_problem: instance of a subclass of StochasticProblemBasis
             The stochastic problem to be solved on the scenario tree.
@@ -240,7 +240,7 @@ class ApproximateProblem:
                                             self._docplex_models[subroot.address].sum((leaf.data["W"] / subroot.data["W"]) *
                                             self._stochastic_problem.objective_path(leaf, model) for leaf in subroot.leaves))
                     else:
-                        raise ValueError(f"`objective_type` must be either 'path' or 'node', not {self.objective_type}")
+                        raise ValueError(f"`objective_type` must be either 'path' or 'node', not '{self.objective_type}'")
     
     def add_deterministic_constraints(self):
         """Add the deterministic constraints in the docplex models"""
@@ -483,9 +483,14 @@ class ApproximateProblem:
                                          bound=solve_details.best_bound,
                                          time=solve_details.time))
                 
-            # (2) fill every node in scenario tree with optimal decisions
-                if self.fill_scenario_tree and sol is not None:
+            # (2) fill every node in sub-scenario tree with optimal decisions
+                if self.fill_scenario_tree:
                     for node in subroot.nodes:
+                        
+                        if sol is None:
+                            node.data['v'] = np.nan
+                            continue
+                        
                         node.data['decision'] = copy.copy(node.data['decision'])
                         for var_name in self._stochastic_problem.map_stage_to_dvar_names[node.level]:
                             # if decisions wasn't fixed beforehand
@@ -509,6 +514,7 @@ class ApproximateProblem:
                 for node in self.scenario_tree.nodes:
                     node.data.pop('decision', None)
             else:
+                # fill every node that is not root and not in a sub-scenario tree
                 for node in self.scenario_tree.nodes:
                     if node.is_root:
                         continue
