@@ -34,7 +34,11 @@ for the **scenario clustering** part.
 
 `pip install stochoptim`
 
-## Basic Example
+### Dependencies
+
+* `docplex` (version >= '2.9.133')
+
+## Basic Usage
 
 Let's consider the following multistage stochastic optimization problem:
 ![](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/multistage_problem.PNG) 
@@ -60,9 +64,9 @@ class MyMultistageStochasticProblem(StochasticProblemBasis):
         StochasticProblemBasis.__init__(self, 
                                         name='Simple Example of Multistage Problem',
                                         n_stages=self.T + 1,        # number of stages 
-                                        objective_sense='max',      # are we maximizing or minimizing
-                                        is_obj_random=False,        # does the objective function contains randomness
-                                        is_mip=False)               # does the problem includes discrete variables
+                                        objective_sense='max',      # are we maximizing or minimizing?
+                                        is_obj_random=False,        # does the objective function contain randomness?
+                                        is_mip=False)               # does the problem include integer or binary variables?
 
     def decision_variables_definition(self, t):
         yield 'x', range(self.n[t]), 0, None, 'C'
@@ -86,7 +90,7 @@ class MyMultistageStochasticProblem(StochasticProblemBasis):
                        + self.dot(self.B[t][i], self.get_dvar(t-1, 'x')) \
                        <= self.get_rvar(t, 'd')[i] for i in range(self.m[t]))    # A[t].x[t] + B[t].x[t-1] <= d[t]
 ```
-We instantiate the problem with the parameters of interest; for example for T = 2:
+We instantiate the problem with the parameters of interest; for example for T = 2, 2 variables and 3 constraints per stage:
 ```javascript
 import numpy as np
 
@@ -107,7 +111,7 @@ d0 = np.array([8, 1, 1])
 
 my_stochastic_problem = MyMultistageStochasticProblem(T, A, B, c, d0)
 ```
-* Then, we build the uncertainty of our problem using a scenario tree:
+* Then, we build the uncertainty of our problem using a scenario tree: (for the sake of simplicity we consider here a standard (non-optimized) tree with 2 branches per stage)
 
 ```javascript
 from stochoptim.scengen.scenario_tree import ScenarioTree
@@ -115,10 +119,10 @@ from stochoptim.scengen.scenario_process import ScenarioProcess
 
 def scenario_fct(stage, epsilon, scenario_path):
     if stage >= 1:
-        return {'d': np.random.uniform(1, 10, size=(m,))}
+        return {'d': np.random.uniform(1, 10, size=(3,))}
       
 scenario_process = ScenarioProcess(scenario_fct, None)      # scenario generator
-my_scenario_tree = ScenarioTree.from_bushiness([2,2])       # naked tree structure
+my_scenario_tree = ScenarioTree.from_bushiness([2,2])       # naked tree structure with 2 branches per stage
 my_scenario_tree.fill(scenario_process)                     # tree structure filled with scenarios
 ```
 * Finally, we call the `.solve()` method of the problem on the scenario tree:
@@ -137,9 +141,11 @@ axes[3].axis('off')
 solution.scenario_tree.plot(lambda node: np.round(node.data['v'], 3), ax=axes[4])
 ```
 ![](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/Images/scenario_tree_solution.png) 
-**Left**: values and probability of the 3-dimensional random parameter 'd'. \
+**Left**: values and probabilities of the 3-dimensional random parameter 'd'. \
 **Middle**: optimal decisions 'x'. \
 **Right**: optimal objective values (at the root node and conditionally on the scenarios)
+
+If you want to try other scenario trees, see notebook [Basic Example](https://github.com/julienkeutchayan/StochOptim/blob/master/notebooks/0.%20Basic%20Example.ipynb)
 
 ## Tutorials and Examples
 
