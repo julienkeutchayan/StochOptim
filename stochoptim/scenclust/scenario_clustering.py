@@ -7,11 +7,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import time
 
-import sklearn.cluster
-import pyclustering.cluster.kmedoids
-import pyclustering.cluster.kmedians
-import kmodes.kprototypes
-import sklearn_extra.cluster
+try:
+    import sklearn.cluster
+except ModuleNotFoundError as e:
+    print(e)
+    
+try:
+    import pyclustering.cluster.kmedoids
+    import pyclustering.cluster.kmedians
+except ModuleNotFoundError as e:
+    print(e)
+    
+try:
+    import kmodes.kprototypes
+except ModuleNotFoundError as e:
+    print(e)
+    
+try:
+    import sklearn_extra.cluster
+except ModuleNotFoundError as e:
+    print(e)  
 
 from stochoptim.scenclust.cost_space_partition import CostSpaceScenarioPartitioning
 from stochoptim.scengen.scenario_tree import ScenarioTree
@@ -129,19 +144,26 @@ class ScenarioClustering:
         return self._solutions
     
     @property
+    def scenarios(self):
+        return self._scenarios
+    
+    @property
     def n_features(self):
         """Total number of features in a scenario (i.e., number of parameters included in a scenario)."""
         return self._n_features
 
     @property
     def n_runs(self) -> Dict[str, Dict[int, int]]:
-        return {method: {card: self.get_n_runs(meth, card) for meth, card in self._results.keys() if meth == method}
+        return {method: {card: self.get_n_runs(method, card) for card in self.cardinalities(method)}
                                  for method in self._methods_available}
         
+    def cardinalities(self, method):
+        return sorted([card for meth, card in self._results.keys() if meth == method])
+    
     def n_random_features(self, method=None, cardinality=None, index_sample=0):
         """Number of actually random features in the original set of scenarios. A feature is random if it 
         has a standard deviation > 0."""
-        n_rand_features = lambda scenarios: len(np.where(np.std(np.array(scenarios), axis=0) > 10**-10)[0]) 
+        n_rand_features = lambda scenarios: len((np.max(scenarios, axis=0) - np.min(scenarios, axis=0)).nonzero()[0])
         if method is None:
             return n_rand_features(self._scenarios)
         else:
@@ -342,43 +364,43 @@ class ScenarioClustering:
                                                                                              index_sample)])
             elif method in self._methods_type_b:
                 return self._results[method, cardinality][index_sample]['scenarios']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
         
     def get_weights(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['weights']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
     
     def get_representatives(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['reps']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
 
     def get_partition(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['partition']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
         
     def get_clust_time(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['time']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
         
     def get_score(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['score']
-        except KeyError:
+        except (KeyError, IndexError):
             return None
         
     def get_param(self, method, cardinality, index_sample=0):
         try:
             return self._results[method, cardinality][index_sample]['param']
-        except KeyError:
+        except (KeyError, IndexError):
             return dict()
         
     def _set_results(self, method, cardinality, representatives, partition=None, scenarios=None, score=None, param=None):
@@ -569,15 +591,13 @@ class ScenarioClustering:
                                                   timelimit=timelimit_eval,
                                                   logfile=logfile_eval,
                                                   **kwargs)
-
+            
     def outer_solve(self,
                      cardinality: int,
-                     optimize_fct: Callable[[ScenarioTree, int], Tuple[StochasticSolutionBasis, DecisionProcess]],
-                     evaluate_fct: Callable[[ScenarioTree, DecisionProcess, int], StochasticSolutionBasis],
+                     optimize_fct: Callable[[ScenarioTree], Tuple[StochasticSolutionBasis, DecisionProcess, int]],
+                     evaluate_fct: Callable[[ScenarioTree, DecisionProcess], Tuple[StochasticSolutionBasis, int]],
                      methods: Optional[List[str]] = None, 
                      indices_sample: Optional[Dict[str, List[int]]] = None,
-                     timelimit_opt: Optional[int] = None,
-                     timelimit_eval: Optional[int] = None,
                      **kwargs):
         """Solve the stochastic problem over the clustered set of scenarios and evaluate the solution using the optimizer 
         and evaluator functions provided as input.
@@ -587,12 +607,13 @@ class ScenarioClustering:
         cardinality: int
             The cardinality of the clustering for which the stochatic problem will be solved.
             
-        optimize_fct: The optimizer function that takes a scenario tree (ScenarioTree) and a time limit (int), and 
-            returns a solution to the stochastic problem (StochasticSolutionBasis) and the decision process 
-            (DecisionProcess) to be evaluated in the next step.
+        optimize_fct: The optimizer function that takes a scenario tree (ScenarioTree) and 
+            returns a solution to the stochastic problem (StochasticSolutionBasis), the decision process 
+            (DecisionProcess) to be evaluated in the next step, and the time (int) it took to solve the problem.
             
         evaluate_fct: The evaluator function that takes a scenario tree (ScenarioTree), a decision process 
-            (DecisionProcess) and a time limit (int), and returns a solution to the problem (StochasticSolutionBasis)
+            (DecisionProcess), and returns a solution to the problem (StochasticSolutionBasis) with 
+            the time (int) it took to solve the problem.
             
         methods: list of str or None (default: None)
             The clustering methods for which the stochastic problem will be solved.
@@ -601,20 +622,13 @@ class ScenarioClustering:
         indices_sample: Dict[str, List[int]] or None (default: None)
             Mapping from the method to the indices of samples for which the stochastic problem will be solved.
             If None, all samples are solved.
-            
-        timelimit_opt: int >= 1 or None (default: None)
-            Time limit to solve the proxy problem with the clustered scenarios.
-            
-        timelimit_eval: int >= 1 or None (default: None)
-            Time limit to solve the problem that evaluates the solution of the clustered problem.
         """
         methods = self._check_and_set_methods(methods)
         indices_sample = self._check_and_set_samples(indices_sample, methods, cardinality)
 
         for method in methods:            
             for index_sample in indices_sample[method]:
-                print(f"{method} K={cardinality} #{index_sample}:")
-                
+               
                 key = (method, cardinality, index_sample)
                 if self._solutions.get(key) is None:
                     self._solutions[key] = {}     
@@ -623,11 +637,11 @@ class ScenarioClustering:
                 weights = self.get_weights(*key)
                 scenario_tree = ScenarioTree.twostage_from_scenarios(scenarios, self._map_rvar_to_nb, weights)
                 
-                sol_opt, dec_pro = optimize_fct(scenario_tree, timelimit_opt)
-                sol_eval = evaluate_fct(self._scenario_tree, dec_pro, timelimit_eval)
+                sol_opt, dec_pro, time_opt = optimize_fct(scenario_tree)
+                sol_eval, time_eval = evaluate_fct(self._scenario_tree, dec_pro)
                 
-                self._solutions[key][timelimit_opt] = sol_opt
-                self._solutions[key][(timelimit_opt, timelimit_eval)] = sol_eval    
+                self._solutions[key][time_opt] = sol_opt
+                self._solutions[key][(time_opt, time_eval)] = sol_eval
         
     def _check_and_set_samples(self, indices_sample, methods, cardinality):
         """Check and set indices_sample input"""
@@ -657,6 +671,7 @@ class ScenarioClustering:
             # check methods name
             assert set(methods).issubset(set(self._methods_available)), \
                 f"Methods {set(methods).difference(set(self._methods_available))} do not exist."
+        return methods
                 
     def get_opt_solution(self, method, cardinality, index_sample=None, timelimit=None):
         try:
@@ -666,7 +681,7 @@ class ScenarioClustering:
             if timelimit is None:
                 timelimit = [t for t in solutions.keys() if isinstance(t, (int, float)) or t is None][0]
             return solutions[timelimit]
-        except KeyError:
+        except (KeyError, IndexError):
             return None
         
     def get_eval_solution(self, method, cardinality, index_sample=None, timelimit_tuple=None):
@@ -677,7 +692,7 @@ class ScenarioClustering:
             if timelimit_tuple is None:
                 timelimit_tuple = [t for t in solutions.keys() if isinstance(t, tuple)][0]
             return solutions[timelimit_tuple]
-        except KeyError:
+        except (KeyError, IndexError):
             return None
 
     def get_gap(self, method, cardinality, index_sample=None, timelimit_tuple=None):
@@ -697,6 +712,7 @@ class ScenarioClustering:
                     samples: Optional[Dict[int, List[int]]] = None, 
                     card_fct: Callable[[int], bool] = lambda card: True,
                     x_in_percent: bool = False,
+                    show_mean=False,
                     title: Optional[str] = None,
                     figsize=(7,5),
                     ax=None):
@@ -710,11 +726,15 @@ class ScenarioClustering:
         
         if samples is None:
             samples = {card: range(n_sample) for card, n_sample in self.n_runs[method].items()}
-    
-        for card, indices_samples in samples.items():
+        if show_mean: 
+            y_list, card_list = [], []
+        for card in sorted(list(samples.keys())):
             if not card_fct(card):
-                continue
-            for index in indices_samples:
+                continue 
+            if show_mean: 
+                y_list.append([])
+                card_list.append(card)
+            for index in samples[card]:
                 key = (method, card, index)              
                 if self._solutions.get(key) is None:
                     continue
@@ -744,6 +764,10 @@ class ScenarioClustering:
                         ax.scatter(100 * card / self._n_scenarios, y, marker="x")
                     else:
                         ax.scatter(card, y, marker="x")
+                    if show_mean:
+                        y_list[-1].append(y)
+        if show_mean:
+            ax.plot(card_list, [np.mean(ys) for ys in y_list])
         if x_in_percent:
             ax.set_xlabel("cardinality (%)")
         else:
@@ -764,6 +788,7 @@ class ScenarioClustering:
         else:
             for i, method in enumerate(methods_with_data):
                 self.plot_method(method, ax=ax[i], **kwargs)
+        return ax
         
     # --- Save and load results ----
     def to_file(self, wdir, tree_extension='pickle', show_files=True, remove_tree_keys=None):
@@ -916,10 +941,7 @@ class ScenarioClustering:
         string += ("\nReference solution: \n"
                   f"  {self._reference_solution} \n")
         return string
-              
-    def __repr__(self):
-        return self.__str__() + "\n" + self.print_results(return_string=True)
-    
+                  
     def print_results(self, method=None, cardinality=None, index_sample=None, return_string=False):
         # limit print of the weights
         np.set_printoptions(threshold=15, linewidth=120) # max 15 weights
@@ -930,8 +952,7 @@ class ScenarioClustering:
         string = f"Reference solution: \n  {self._reference_solution} \n"
         for method in methods:
             string += f"\n{method}: \n" + "#" * (len(method)+1) + "\n"
-            cardinalities = [card for (meth, card) in self._results.keys() if meth == method]
-            for card in sorted(cardinalities):
+            for card in self.cardinalities(method):
                 if not is_card_valid(card): continue
                 string += f"  Cardinality: {card} \n  " + "-" * len(f"Cardinality: {card}") + "\n"
                 for index in range(self.get_n_runs(method, card)):
