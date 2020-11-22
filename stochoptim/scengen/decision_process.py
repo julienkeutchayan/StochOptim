@@ -21,7 +21,8 @@ class DecisionProcess:
     
     def __init__(self, 
                  map_dvar_to_index: Dict[int, Dict[str, Dict[SubscriptType, int]]], 
-                 input_decision_dict: Optional[Dict[int, Dict[str, List[DecisionType]]]] = None):
+                 input_decision_dict: Optional[Dict[int, Dict[str, List[DecisionType]]]] = None,
+                 checker=False):
         """
         Arguments:
         ----------
@@ -33,10 +34,15 @@ class DecisionProcess:
         input_decision_dict: Dict[int, Dict[str, List[DecisionType]]] or None (default: None)
             The decisions that are fixed beforehand. (More fixed decisions can be added later on via the 
             `update_decision_array` and `update_decision_value` methods)
+            
+        checker: bool (default: True)
+            If True, check that the decision variables have the appropriate size (as specified
+            in the stochastic problem) when being updated.
         """
         self._map_dvar_to_index = map_dvar_to_index
         self._map_stage_to_dvar_nb: Dict[int, Dict[str, int]] = {}
         self._decision_dict: Dict[int, Dict[str, List[DecisionType]]] = {}
+        self._checker = checker
         self._initialize_decision_dict()
         
         if input_decision_dict is not None:
@@ -86,9 +92,10 @@ class DecisionProcess:
         """Update a whole array of decisions"""
         new_decision_array = np.array(new_decision_array)
         assert len(new_decision_array.shape) == 1, "The new decision array should be 1-dimensional"
-        assert new_decision_array.shape[0] == self._map_stage_to_dvar_nb[stage][var_name], \
-            (f"The new decision array should have the same size as the previous one, namely "
-             f"{(self._map_stage_to_dvar_nb[stage][var_name],)}, not {new_decision_array.shape}.")
+        if self._checker:
+            assert new_decision_array.shape[0] == self._map_stage_to_dvar_nb[stage][var_name], \
+                (f"The new decision array should have the same size as the previous one, namely "
+                 f"{(self._map_stage_to_dvar_nb[stage][var_name],)}, not {new_decision_array.shape}.")
         self._check_var_name(stage, var_name)
         self._decision_dict[stage][var_name] = new_decision_array
         
@@ -153,7 +160,7 @@ class DecisionProcess:
                            stage: int, 
                            scenario_path: Optional[ScenarioPathType] = None) -> Dict[str, List[FixedDecisionType]]:
         """Return a whole dictionary of decisions at one stage"""
-        return {var_name: self.get_decision_array(stage, scenario_path, var_name) 
+        return {var_name: self.get_decision_array(stage, var_name, scenario_path) 
                              for var_name in self._decision_dict[stage].keys()}
                             
     def __call__(self, 
