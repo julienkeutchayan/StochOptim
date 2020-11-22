@@ -159,15 +159,12 @@ class StochasticProblemBasis(ABC):
     def random_linear_constraints(self, stage):
         pass
     
-    @abstractmethod
     def precompute_decision_variables(self, stage: int) -> Iterator[Tuple[str, Callable[[], Any]]]:
         pass
     
-    @abstractmethod
     def precompute_parameters(self, stage: int) -> Iterator[Tuple[str, Callable[[], Any]]]:
         pass
     
-    @abstractmethod
     def sanity_check(self, stage):
         pass
     
@@ -384,16 +381,24 @@ class StochasticProblemBasis(ABC):
         --------
         int/float or 1d-array: the decision variable(s).
         """
+        try:
+            decisions = self._decision_path[stage][var_name]
+        except KeyError:
+            if self._decision_path.get(stage) is None:
+                raise KeyError(f"Stage {stage} is not valid at node of address {self._node_address}."
+                               f"Stage should be <= {len(self._node_address)}")
+            elif self._decision_path[stage].get(var_name) is None:
+                raise KeyError(f"Variable '{var_name}' is not a valid decision variable at stage "
+                               f"{stage}. Valid decisions: {list(self._decision_path[stage].keys())}")   
         if var_subscripts is None:
-            return self._decision_path[stage][var_name]
+            return decisions
         else:
             index = self.get_dvar_index(stage, var_name, var_subscripts)
             try:
-                return self._decision_path[stage][var_name][index]
+                return decisions[index]
             except IndexError:
                 raise IndexError(f"Variable subscript {var_subscripts} (index = {index}) is out of bounds for '{var_name}' "
-                f"at stage {stage}, which has {self._decision_path[stage][var_name].shape[0]} elements: "
-                f"{self._decision_path[stage][var_name]}")
+                f"at stage {stage}, which has {decisions.shape[0]} elements: {decisions}")
                 
     def get_rvar(self, 
                  stage: int, 
@@ -822,14 +827,18 @@ class StochasticProblemBasis(ABC):
                     self._name_precomputed_parameters[stage].add(name)
             
     def precompute_decision_variables_at_node(self, node, model=None):
-        self.set_path_info(node, model)
-        if self._name_precomputed_decisions[node.level] != set():
+        if self._name_precomputed_decisions[node.level]: # implied booleanness tests if not empty
+            if node.data.get('memory') is None:
+                node.data['memory'] = {}
+            self.set_path_info(node, model)
             for name, value_fct in self.precompute_decision_variables(node.level):
                 self._memory_path[node.level][name] = value_fct()
         
     def precompute_parameters_at_node(self, node):
-        self.set_path_info(node)
-        if self._name_precomputed_parameters[node.level] != set():
+        if self._name_precomputed_parameters[node.level]: # implied booleanness tests if not empty
+            if node.data.get('memory') is None:
+                node.data['memory'] = {}
+            self.set_path_info(node)
             for name, value_fct in self.precompute_parameters(node.level):
                 self._memory_path[node.level][name] = value_fct()
                                     
