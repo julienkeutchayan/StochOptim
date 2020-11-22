@@ -7,6 +7,7 @@ from typing import Dict, Union, Optional, List
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import sparse
 
 from stochoptim.scengen.tree_structure import Node
 from stochoptim.scengen.tree_structure import get_data_path
@@ -359,6 +360,11 @@ class ScenarioTree(Node):
         weights: 1d-array (optional)
             Array of shape (number_of_scenarios,). If None, equal-weights are considered.
         """
+        if sparse.issparse(scenarios):
+            if scenarios.dtype == np.float16: # float16 not directly supported for sparse matrix
+                scenarios = scenarios.astype(np.float32).toarray().astype(np.float16)
+            else:
+                scenarios = scenarios.toarray()
         if isinstance(scenarios, list):
             scenarios = np.array(scenarios)
         assert len(scenarios.shape) == 2, \
@@ -403,6 +409,11 @@ class ScenarioTree(Node):
         weights: 1d-array (optional)
             Array of shape (number_of_scenarios,). If not provided, equal-weights are considered.
         """
+        if sparse.issparse(scenarios):
+            if scenarios.dtype == np.float16: # float16 not directly supported for sparse matrix
+                scenarios = scenarios.astype(np.float32).toarray().astype(np.float16)
+            else:
+                scenarios = scenarios.toarray()
         last_stage = max(map_stage_to_rvar_nb.keys())
         n_var_at_each_stage = [sum(map_stage_to_rvar_nb.get(t, {'': 0}).values()) for t in range(1, last_stage+1)]
         
@@ -435,8 +446,60 @@ class ScenarioTree(Node):
     
         return cls.from_data_dict(data_dict)
 
-    # --- Operations on scenarios ---    
-    def average(self, map_stage_to_rvar_names: Optional[Dict[int, List[str]]] = None):
+    # --- Operations on scenarios ---   
+    def merge(self, **kwargs):
+        """Merge sibling nodes if they have identical scenarios. Adjust the weights 
+        accordingly. (Note that the nodes are merged regardless of whether they have identical
+        subtrees or not.)
+        
+        kwargs: 
+        ------
+        All kwargs of np.isclose
+        """
+        for node in self.nodes:
+            if node.is_leaf:
+                continue
+            to_be_removed = []
+            for k, child1 in enumerate(node.children):
+                for child2 in node.children[k+1:]:
+                    # test if same scenario at child node
+                    is_equal = True
+                    for var_name in self.map_stage_to_rvar_names[node.level + 1]:
+                        if not np.isclose(child1.data['scenario'][var_name], 
+                                          child2.data['scenario'][var_name], 
+                                          **kwargs).all():
+                            is_equal = False
+                            break
+                    if is_equal:
+                        weight_coef = (child2.data["W"] + child1.data["W"]) / child2.data["W"]
+                        for n in child2.nodes:
+                            n.data["W"] *= weight_coef
+                        to_be_removed.append(child1)
+                        break
+            for child in to_be_removed:
+                child.remove()
+                    
+    def average(self, 
+                map_stage_to_rvar_names: Optional[Dict[int, List[str]]] = None,
+                across_tree: bool = True):
+        """Replace some scenarios by their average value in place.        
+        
+        Arguments:
+        ---------
+        across_tree: bool (default: True)
+            If True, averages are computed across all nodes at a given stage. Otherwise, it
+            is compute across all children.
+            
+        map_stage_to_rvar_names: Dict[int, List[str]] or None (default: None)
+            The stages (int) and variables names (List[str]) for which the scenarios are averaged.
+            If None, all stages and all variables are averaged.
+        """
+        if across_tree:
+            self._average_across_tree(map_stage_to_rvar_names)
+        else:
+            self._average_across_children(map_stage_to_rvar_names)
+
+    def _average_across_tree(self, map_stage_to_rvar_names: Optional[Dict[int, List[str]]] = None):
         """Replace some scenarios by their average value in place.
         
         Argument:
@@ -453,6 +516,24 @@ class ScenarioTree(Node):
                 for node in self.nodes_at_level(stage):
                     node.data['scenario'][var_name] = avg_scen
 
+    def _average_across_children(self, map_stage_to_rvar_names: Optional[Dict[int, List[str]]] = None):
+        """Replace some scenarios by their average value in place.
+        
+        Argument:
+        ---------
+        map_stage_to_rvar_names: Dict[int, List[str]] or None (default: None)
+            The stages (int) and variables names (List[str]) for which the scenarios are averaged.
+            If None, all stages and all variables are averaged.
+        """
+        if map_stage_to_rvar_names is None:
+            map_stage_to_rvar_names = self.map_stage_to_rvar_names
+        for stage in map_stage_to_rvar_names.keys():
+            for node in self.nodes_at_level(stage - 1):
+                for var_name in map_stage_to_rvar_names[stage]:                
+                    avg_scen = np.mean([child.data['scenario'][var_name] for child in node.children], axis=0)
+                    for child in node.children:
+                        child.data['scenario'][var_name] = avg_scen
+            
     def to_numpy(self, map_stage_to_rvar_names: Optional[Dict[int, List[str]]] = None) -> np.ndarray:
         """ Return the scenarios as a numpy array. 
         
@@ -506,7 +587,7 @@ class ScenarioTree(Node):
         return np.array([self.get_path_as_numpy(n, map_stage_to_rvar_names) for n in node.leaves if n != node])
     
     # --- Plots ---
-    def plot(self, 
+    def plot_scenarios(self, 
              var_name: Optional[Union[str, Dict[int, str]]] = None, 
              scenario_precision: int = 2,
              format_weights: str = '.3f',
@@ -540,11 +621,11 @@ class ScenarioTree(Node):
             else:
                 return ""
 
-        super().plot(print_on_nodes=print_on_nodes,
-                     print_on_edges=print_on_edges,
-                     **kwargs)
+        return super().plot(print_on_nodes=print_on_nodes,
+                             print_on_edges=print_on_edges,
+                             **kwargs)
     
-    def plot_scenarios(self, 
+    def plot_trajectories(self, 
                        var_name,
                        component=0,
                        figsize=(10,5),
@@ -555,9 +636,13 @@ class ScenarioTree(Node):
         for node in self.nodes:
             # plot dots at all nodes but leaves
             if not node.is_leaf:
+                if node.data.get("scenario", {}).get(var_name) is None:
+                    continue
                 plt.scatter(node.level, node.data["scenario"][var_name][component], marker="", c=color_fct(i))
                 #plot links between the dots
                 for m in node.children:
+                    if m.data.get("scenario", {}).get(var_name) is None:
+                        continue
                     x = [node.level, m.level]
                     y = [node.data["scenario"][var_name][component], m.data["scenario"][var_name][component]]
                     ax.plot(x, y, c=color_fct(i))
@@ -565,7 +650,7 @@ class ScenarioTree(Node):
                     if node.is_parent_of_leaf:
                         ax.scatter(m.level, m.data["scenario"][var_name][component], marker="", c=color_fct(i))
                 i += 1
-        plt.show()
+        return ax
         
     def plot_hist(self, 
                   stage,
@@ -591,7 +676,7 @@ class ScenarioTree(Node):
         if xlim is not None:
             ax.set_xlim(*xlim)
             
-        plt.show()
+        return ax
         
     # --- Scenario interpolation --- 
     def nearest_nodes(self, n_nearest, scenario_path, across_tree=True, norm_ord=2, metric=None):
@@ -675,8 +760,7 @@ class ScenarioTree(Node):
                        
     # --- Copy, save, load ---
     def copy(self):
-        cls = self.__class__
-        return cls(Node.copy(self))
+        return self.__class__(Node.copy(self))
            
     @classmethod
     def from_file(cls, path, extension):
@@ -700,29 +784,37 @@ def average(scenario_tree: ScenarioTree,
     """
     scen_tree = copy.deepcopy(scenario_tree)
     scen_tree.average(map_stage_to_rvar_names)
-    return scen_tree
-    
+    return scen_tree  
 
 def decompose(scenario_tree: ScenarioTree) -> List[ScenarioTree]:
-    """ Return a list of scenario trees each with a single scenario corresponding to a path to a leaf of `self`"""
-    scenarios = scenario_tree.to_numpy()
-    n_scenarios = scenarios.shape[0]
-    return [combtree_from_scenarios(scenarios[[i]], scenario_tree.map_stage_to_rvar_nb) for i in range(n_scenarios)]     
+    """ Return a list of scenario trees each with a single scenario up to the leaf`"""
+    return [combtree_from_scenarios(scenario_tree.get_path_as_numpy(leaf)[np.newaxis], 
+                                    scenario_tree.map_stage_to_rvar_nb) for leaf in scenario_tree.leaves] 
 
-
-def collapse(scenario_tree: ScenarioTree) -> ScenarioTree:
+def collapse_twostage(tree: ScenarioTree) -> ScenarioTree:
     """Return the scenario tree built from `self` by merging identical scenarios. 
     Note: Works only for two-stage."""
-    assert scenario_tree.depth == 2, "Scenario tree should be two-stage"
-    scenarios = scenario_tree.to_numpy()
-    old_n_scenarios = scenarios.shape[0]
-    unique_scenarios, inverse_indices = np.unique(scenarios, axis=0, return_inverse=True)
-    new_n_scenarios = unique_scenarios.shape[0]
-    weights = np.zeros((new_n_scenarios,))
-    for index in inverse_indices:
-        weights[index] += 1 / old_n_scenarios
-    return twostage_from_scenarios(unique_scenarios, scenario_tree.map_stage_to_rvar_nb[1], weights)
-    
+    assert tree.depth == 2, "Scenario tree should be two-stage"
+    unique_scenarios, inverse_indices = np.unique(tree.to_numpy(), axis=0, return_inverse=True)
+    weights = np.array([child.data["W"] for child in tree.children])
+    new_weights = [np.sum(weights[inverse_indices == index]) for index in range(len(unique_scenarios))]
+    return twostage_from_scenarios(unique_scenarios, tree.map_stage_to_rvar_nb[1], new_weights)
+                
+def product(tree1, tree2):
+    """Return the product of two scenario trees (works for two-stage only).
+    The product scenario tree defines the joint distribution of the two distributions defined 
+    by the input scenario trees. Note that only data keys "W" and "scenario" are built in 
+    the output tree (all other keys in in the input trees will not be copied)."""
+    assert tree1.depth == 2 and tree2.depth == 2, "Scenario trees should be two-stage"
+    new_tree = from_bushiness([tree1.width[-1] * tree2.width[-1]])
+    new_tree.data["W"] = 1
+    for k, child in enumerate(new_tree.children):
+        k2, k1 = k // tree1.width[-1], k % tree1.width[-1]
+        data1 = tree1.node_at_address((k1,)).data
+        data2 = tree2.node_at_address((k2,)).data
+        child.data["W"] = data1["W"] * data2["W"]
+        child.data["scenario"] = {**data2["scenario"], **data1["scenario"]}
+    return new_tree
 
 from_file = ScenarioTree.from_file
 from_topology = ScenarioTree.from_topology
