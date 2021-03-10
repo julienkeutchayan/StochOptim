@@ -324,21 +324,41 @@ class ScenarioTree(Node):
                 child.data["scenario"] = scenario_process.get_node_scenario(child, path=False)
                 
     # --- Alternative constructors ---
-    @classmethod
-    def from_topology(cls, topology):
-        return cls(Node.from_topology(topology))
+    @staticmethod
+    def _set_equal_weights(tree_structure):
+        tree_structure.data["W"] = 1
+        for node in tree_structure.nodes:
+            if not node.is_root:
+                node.data["W"] = node.parent.data["W"] / len(node.parent.children)
+        return tree_structure
     
     @classmethod
-    def from_recurrence(cls, last_stage, init, recurrence):
-        return cls(Node.from_recurrence(last_stage, init, recurrence))
+    def from_topology(cls, topology, equal_weights=False):
+        scen_tree = cls(Node.from_topology(topology))
+        if equal_weights:
+            scen_tree = ScenarioTree._set_equal_weights(scen_tree)
+        return scen_tree
     
     @classmethod
-    def from_bushiness(cls, bushiness):
-        return cls(Node.from_bushiness(bushiness))
+    def from_recurrence(cls, last_stage, init, recurrence, equal_weights=False):
+        scen_tree = cls(Node.from_recurrence(last_stage, init, recurrence))
+        if equal_weights:
+            scen_tree = ScenarioTree._set_equal_weights(scen_tree)
+        return scen_tree
     
     @classmethod
-    def from_data_dict(cls, data_dict):
-        return cls(Node.from_data_dict(data_dict))
+    def from_bushiness(cls, bushiness, equal_weights=False):
+        scen_tree = cls(Node.from_bushiness(bushiness))
+        if equal_weights:
+            scen_tree = ScenarioTree._set_equal_weights(scen_tree)
+        return scen_tree
+    
+    @classmethod
+    def from_data_dict(cls, data_dict, equal_weights=False):
+        scen_tree = cls(Node.from_data_dict(data_dict))
+        if equal_weights:
+            scen_tree = ScenarioTree._set_equal_weights(scen_tree)
+        return scen_tree
 
     @classmethod
     def twostage_from_scenarios(cls, 
@@ -759,8 +779,8 @@ class ScenarioTree(Node):
         return nearest_nodes
                        
     # --- Copy, save, load ---
-    def copy(self):
-        return self.__class__(Node.copy(self))
+    def copy(self, deep_copy=False):
+        return self.__class__(Node.copy(self, deep_copy))
            
     @classmethod
     def from_file(cls, path, extension):
@@ -800,9 +820,9 @@ def collapse_twostage(tree: ScenarioTree) -> ScenarioTree:
     new_weights = [np.sum(weights[inverse_indices == index]) for index in range(len(unique_scenarios))]
     return twostage_from_scenarios(unique_scenarios, tree.map_stage_to_rvar_nb[1], new_weights)
                 
-def product(tree1, tree2):
+def product(tree1: ScenarioTree, tree2: ScenarioTree):
     """Return the product of two scenario trees (works for two-stage only).
-    The product scenario tree defines the joint distribution of the two distributions defined 
+    The product scenario tree represents the joint uncertainty of the two distributions defined 
     by the input scenario trees. Note that only data keys "W" and "scenario" are built in 
     the output tree (all other keys in in the input trees will not be copied)."""
     assert tree1.depth == 2 and tree2.depth == 2, "Scenario trees should be two-stage"
@@ -816,6 +836,23 @@ def product(tree1, tree2):
         child.data["scenario"] = {**data2["scenario"], **data1["scenario"]}
     return new_tree
 
+def _concatenate(tree1, tree2, deep_copy=False):
+    final_tree = tree1.copy(deep_copy)
+    for leaf in list(final_tree.leaves):
+        leaf.add(*tree2.copy(deep_copy).children)
+        for node in leaf.nodes:
+            if node.address != leaf.address:
+                node.data["W"] *= leaf.data["W"]
+    return final_tree
+            
+def concatenate(trees: List[ScenarioTree], deep_copy: Optional[bool] = False):
+    assert isinstance(trees, (list, tuple)) and len(trees) >= 2, \
+        f"There must be at least 2 scenario trees."
+    final_tree  = trees[0].copy(deep_copy)
+    for tree in trees[1:]:
+        final_tree = _concatenate(final_tree, tree.copy(deep_copy))
+    return final_tree
+    
 from_file = ScenarioTree.from_file
 from_topology = ScenarioTree.from_topology
 from_recurrence = ScenarioTree.from_recurrence

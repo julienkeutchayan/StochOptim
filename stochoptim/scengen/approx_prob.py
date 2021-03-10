@@ -36,7 +36,7 @@ class ApproximateProblem:
                  with_variable_name=False,
                  objective_type='path',
                  verbose=3,
-                 check_sanity=True,
+                 check_sanity=False,
                  check_fixed_constraints=False,
                  check_topology=True,
                  clear_between_trees=True, 
@@ -276,13 +276,21 @@ class ApproximateProblem:
                     rand_cts += model.add_indicators(*zip(*self._gen_constraints(subroot, ct_type, model)))
                 except StopIteration:
                     pass
+                # quadratic constraints (must be added last)
+                try:
+                    ct_type = ('random', 'quadratic')
+                    next(self._gen_constraints(subroot, ct_type, model)) # test whether generator is empty
+                    for ct in self._gen_constraints(subroot, ct_type, model):
+                        rand_cts.append(model.add_constraint(ct)) # one by one
+                except StopIteration:
+                    pass  
                 # linear constraints (must be added last)
                 try:
                     ct_type = ('random', 'linear')
                     next(self._gen_constraints(subroot, ct_type, model)) # test whether generator is empty
                     rand_cts += model.add_constraints(self._gen_constraints(subroot, ct_type, model))
                 except StopIteration:
-                    pass                   
+                    pass      
             self._random_cts[subroot.address] = rand_cts
               
     def remove_random_constraints(self):
@@ -351,14 +359,17 @@ class ApproximateProblem:
         with _timeit(self, "  Precompute variables and parameters... ", 3):
             # initialize memory
             for node in self.scenario_tree.nodes:
-                node.data['memory'] = {}
+                if node.data.get('memory') is not None:
+                    # copy the the reference to the underlying 'memory' dictionary so that
+                    # any new key will not be added to it
+                    node.data['memory'] = node.data['memory'].copy()
             # parameters
             if self.precompute_parameters:
                 for node in self.scenario_tree.nodes:
                     self._stochastic_problem.precompute_parameters_at_node(node)
             # variables
             if self.precompute_decisions:
-                # fixed decisions (no  model needed)
+                # fixed decisions (no model needed)
                 for node in self.scenario_tree.nodes:
                     if node.level < self._stage_fixed_dvar:
                         self._stochastic_problem.precompute_decision_variables_at_node(node)
@@ -557,7 +568,7 @@ def create_docplex_models(n_models, checker='default', mip_emphasis=0, mip_gap=0
     mip_gap: float (default: 0.01)
         Limit on the optimality gap percentage (e.g., 0.05 => algo stops when gap <= 5%)
     
-    lp_method: {0, 1, 2, 4} (default: 0)
+    lp_method: {0, 1, 2, 3, 4} (default: 0)
         0: automatic choice of the algorithm
         1: primal simplex
         2: dual simplex

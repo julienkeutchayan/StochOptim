@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 
 from stochoptim.scengen.decision_process import DecisionProcess
 from stochoptim.scengen.scenario_tree import ScenarioTree
@@ -131,6 +131,16 @@ class StochasticSolutionBasis:
                 decision_process.update_decision_array(decision_path[stage][var_name], stage, var_name)
         return decision_process
     
+    def generate_empty_decisions(self, null_array: Optional[Callable[[int], np.ndarray]] = None):
+        """Initialize an empty numpy array of appropriate length for each and every decision."""
+        if null_array is None:
+            null_array = lambda n: np.empty(n)
+        for stage, map_name_to_nb in self.stochastic_problem.map_dvar_name_to_nb.items():
+            for node in self.scenario_tree.nodes_at_level(stage):
+                node.data['decision'] = {}
+                for name, nb in map_name_to_nb.items():
+                    node.data['decision'][name] = null_array(nb)   
+            
     # --- Sanity ---
     def _check_scenario_index_validity(self, scen_index):
         assert scen_index in range(self.n_scenarios), \

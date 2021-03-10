@@ -5,7 +5,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from typing import List, Callable, Any, Dict, Tuple, Sequence, Union
-
+from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -219,17 +219,20 @@ class Node:
         return ((n for n in l.branch) for l in self.leaves)
     
     # --- Structure update ---
-    def copy(self):
-        """Copy the structure of the tree. This copies the references to the nodes, but the 
-        data at each node still points to the same object (i.e., this is not a deepcopy of the 
-        data attribute)."""
-        tree = Node(**self.data)
+    def copy(self, deep_copy=False):
+        """Copy the structure of the tree. This copies the references to the nodes and their 
+        data dictionary, but the data inside the dictionary still points to the same object 
+        (i.e., this is not a deepcopy of the data attribute)."""
+        if deep_copy:
+            tree = Node(**deepcopy(self.data))
+        else:
+            tree = Node(**self.data)
         for c in self.children:
-            tree.add(c.copy())
+            tree.add(c.copy(deep_copy))
         return tree
 
     def add(self, *children):
-        """Adds a child to the structure."""
+        """Adds children to the node."""
         for c in children:
             self._children.append(c)
             c._parent = self

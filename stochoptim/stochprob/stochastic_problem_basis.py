@@ -5,10 +5,7 @@ import copy
 
 from typing import Union, List, Dict, Tuple, Optional, Callable, Iterator, Any
 import numpy as np
-from docplex.mp.constr import LinearConstraint, QuadraticConstraint
-from docplex.mp.linear import Var
 
-from stochoptim.scengen.approx_prob import ApproximateProblem, _timeit
 from stochoptim.scengen.scenario_tree import ScenarioTree, decompose
 from stochoptim.scengen.tree_structure import Node
 from stochoptim.scengen.decision_process import DecisionProcess
@@ -186,6 +183,12 @@ class StochasticProblemBasis(ABC):
     def random_equivalence_constraints(self, stage):
         pass
     
+    def random_quadratic_constraints(self, stage):
+        pass
+    
+    def deterministic_quadratic_constraints(self, stage):
+        pass
+    
     def deterministic_if_then_constraints(self, stage):
         pass
     
@@ -234,8 +237,10 @@ class StochasticProblemBasis(ABC):
         self._constraints_generators = \
             {('deterministic', 'linear'): self.deterministic_linear_constraints(node.level),
              ('deterministic', 'indicator'): self.deterministic_indicator_constraints(node.level),
+             ('deterministic', 'quadratic'): self.deterministic_quadratic_constraints(node.level),
              ('random', 'linear'): self.random_linear_constraints(node.level),
-             ('random', 'indicator'): self.random_indicator_constraints(node.level)}
+             ('random', 'indicator'): self.random_indicator_constraints(node.level),
+             ('random', 'quadratic'): self.random_quadratic_constraints(node.level)}
             
     def average_over_distribution(self, expression: Callable[[], Any], stage: int):
         """Average an expression over all the nodes at a given stage that are in the subtree of
@@ -245,6 +250,7 @@ class StochasticProblemBasis(ABC):
             self._decision_path = Node.get_data_path(n, 'decision', default={})
             self._scenario_path = ScenarioTree.get_scenario_path(n)
             self._memory_path = Node.get_data_path(n, 'memory', default={})
+            self._node_address = n.address
             avg += (n.data['W'] / self._node.data['W']) * expression()
         self.set_path_info(self._node)
         return avg
@@ -278,6 +284,8 @@ class StochasticProblemBasis(ABC):
                     raise NotImplementedError()
                 elif ct_type[1] == 'if-then':
                     raise NotImplementedError()
+                elif ct_type[1] == 'quadratic':
+                    new_ct_tuple = ct_tuple
                 else:
                     raise ValueError("Wrong type of constraints, must be 'linear', 'indicator', 'equivalence' or "
                                      f"'if-then', not {ct_type[1]}")
@@ -311,13 +319,13 @@ class StochasticProblemBasis(ABC):
     def _inspect_indicator_constraint(self, ct_tuple, ct_type):
         # check the tuple input
         if len(ct_tuple) == 3:
-            ct_tuple = ct_tuple + ('',)
+            ct_tuple = ct_tuple + ('_',)
         elif len(ct_tuple) != 4:
             raise ValueError("Each indicator constraint should be a 3- or 4-tuple (indicator var, constraint, "
                              f"activation value, optional: name), instead we received {ct_tuple}")
         # check specifically the constraint and indicator variable
         var, ct, true_value, name = ct_tuple
-        if isinstance(var, Var): # if indicator variable is not fixed beforehand
+        if np.array(var).dtype == np.dtype('O'): # instance of docplex Var (check if indicator variable is not fixed beforehand)
             if self.is_constraint_relevant(ct, name):
                 assert var.is_binary(), \
                     f"The activation variable '{var}' in the indicator constraint '{name}' must be binary."
@@ -337,7 +345,7 @@ class StochasticProblemBasis(ABC):
         """Return True if the constraint includes a least one decision variable.
         Note: a constraint with no decision variables (i.e., with both side constant) may arise when some of the 
         decisions are fixed beforehand."""
-        if isinstance(ct, (LinearConstraint, QuadraticConstraint)): # if the constraint is a docplex linear expression
+        if np.array(ct).dtype == np.dtype('O'): # if the constraint is a docplex linear expression
             if ct.right_expr.is_constant() and ct.left_expr.is_constant(): # if left-hand side and right-hand side are both constant
                 return False
             else:
@@ -350,7 +358,7 @@ class StochasticProblemBasis(ABC):
     def is_constraint_satisfied(self, ct, name):
         """Return True if a constraint with both sides constant evaluates as True.
         Note: a constraint with both side constant may arise when some of the decisions are fixed beforehand."""
-        if isinstance(ct, LinearConstraint):
+        if np.array(ct).dtype == np.dtype('O'): # if the constraint is a docplex linear expression
             return eval(ct.to_string())
         elif isinstance(ct, (bool, np.bool_, np.bool)):
             return ct
@@ -385,11 +393,11 @@ class StochasticProblemBasis(ABC):
             decisions = self._decision_path[stage][var_name]
         except KeyError:
             if self._decision_path.get(stage) is None:
-                raise KeyError(f"Stage {stage} is not valid at node of address {self._node_address}."
+                raise KeyError(f"Stage {stage} is not valid at node of address {self._node_address}. "
                                f"Stage should be <= {len(self._node_address)}")
             elif self._decision_path[stage].get(var_name) is None:
-                raise KeyError(f"Variable '{var_name}' is not a valid decision variable at stage "
-                               f"{stage}. Valid decisions: {list(self._decision_path[stage].keys())}")   
+                raise KeyError(f"Variable '{var_name}' is not in the decision process at stage "
+                               f"{stage}. Variables in the decision process are: {list(self._decision_path[stage].keys())}")   
         if var_subscripts is None:
             return decisions
         else:
@@ -428,6 +436,8 @@ class StochasticProblemBasis(ABC):
              f"variables at stage {stage}: {self.map_stage_to_rvar_names[stage]}.")
         assert self._scenario_path is not None, \
             "The method `set_path_info(node)` should be called in order to access a random variable at a node."
+      #  assert stage <= len(self._node_address), (f"Information on variable '{var_name}' at stage {stage} "
+      #                     f"is not available at the level {len(self._node_address)} in the scenario")
         if var_subscripts is None:
             return self._scenario_path[stage][var_name]
         else:
@@ -440,7 +450,9 @@ class StochasticProblemBasis(ABC):
                 
     def get_memory(self, stage, var_name):
         """Return the value stored in the scenario tree data memory"""
-        return self._memory_path[stage].get(var_name)
+        assert self._memory_path is not None, \
+            "The method `set_path_info(node)` should be called in order to access memory information at a node."
+        return self._memory_path.get(stage, {}).get(var_name)
     
     def get_dvar_index(self, stage, var_name, var_subscripts):
         """Return the index of a decision variable."""
@@ -495,8 +507,8 @@ class StochasticProblemBasis(ABC):
               *scenario_trees: ScenarioTree,
               decision_process: Optional[DecisionProcess] = None,
               decomposition: bool = True,
-              precompute_parameters: bool = True,
-              precompute_decisions: bool = True,
+              precompute_parameters: bool = False,
+              precompute_decisions: bool = False,
               relaxation: bool = False,
               keep_integer: Optional[Dict[int, List[str]]] = None,
               remove_constraints: Optional[List[str]] = None,
@@ -561,7 +573,7 @@ class StochasticProblemBasis(ABC):
             
         kwargs:
         -------
-        check_sanity: bool (default: True)
+        check_sanity: bool (default: False)
             If True, execute the sanity check specified in the stochastic problem.
         
         check_fixed_constraints: bool (default: False)
@@ -591,6 +603,8 @@ class StochasticProblemBasis(ABC):
         An instance or a list of instances of the class `self._solution_class`.
         `self._solution_class` is either the class StochasticSolutionBasis or a subclass
         """ 
+        from stochoptim.scengen.approx_prob import ApproximateProblem, _timeit
+
         # check scenario trees
         self._check_scenario_trees(scenario_trees)
         
@@ -609,7 +623,7 @@ class StochasticProblemBasis(ABC):
             print(f"Number of scenario trees: {len(scenario_trees)} (bushiness: {scenario_trees[0].bushiness}) \n")
 
         # build and solve approximate problem  (trees are copied to store memory data at the nodes)
-        approximate_problem = ApproximateProblem(scenario_trees[0].copy(), 
+        approximate_problem = ApproximateProblem(scenario_trees[0].copy(),
                                                  stochastic_problem=copy.copy(self),
                                                  decision_process=decision_process, 
                                                  decomposition=decomposition, 
@@ -834,12 +848,14 @@ class StochasticProblemBasis(ABC):
             for name, value_fct in self.precompute_decision_variables(node.level):
                 self._memory_path[node.level][name] = value_fct()
         
-    def precompute_parameters_at_node(self, node):
+    def precompute_parameters_at_node(self, node, verbose=0):
         if self._name_precomputed_parameters[node.level]: # implied booleanness tests if not empty
             if node.data.get('memory') is None:
                 node.data['memory'] = {}
             self.set_path_info(node)
             for name, value_fct in self.precompute_parameters(node.level):
+                if verbose:
+                    print(f"\rPrecompute parameter '{name}' at node '{self._node_address}'..."+" "*20, end="")
                 self._memory_path[node.level][name] = value_fct()
                                     
     # --- Sanity check ---        
